@@ -27,6 +27,10 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png">
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -358,6 +362,20 @@ optgroup{color:var(--muted);font-style:normal}
       <thead><tr><th>📅 날짜</th><th>🔄 교대</th><th>🏷️ 품번</th><th>📦 생산</th><th>❌ 불량</th><th>🏆 OEE</th><th></th></tr></thead>
       <tbody id="recentRecordsTbody"></tbody>
     </table>
+  </div>
+
+  <!-- 데이터 관리 -->
+  <div class="section-title" style="margin-top:20px">💾 데이터 관리</div>
+  <div class="form-card" style="display:flex;gap:10px;padding:12px">
+    <button onclick="exportData()"
+      style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border:none;cursor:pointer;border-radius:10px;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;background:linear-gradient(135deg,var(--accent3),#44cc44);color:#000;box-shadow:0 4px 16px rgba(127,255,107,0.25)">
+      📤 내보내기
+    </button>
+    <label
+      style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border:none;cursor:pointer;border-radius:10px;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;background:linear-gradient(135deg,var(--accent2),#cc4400);color:#fff;box-shadow:0 4px 16px rgba(255,107,53,0.25)">
+      📥 가져오기
+      <input type="file" accept=".json" onchange="importData(event)" style="display:none">
+    </label>
   </div>
 </div>
 
@@ -764,6 +782,35 @@ optgroup{color:var(--muted);font-style:normal}
 <script>
 'use strict';
 
+// ══ Firebase 설정 ══
+// 👉 Firebase 콘솔 → 프로젝트 설정 → 웹 앱의 config를 아래에 붙여넣으세요
+const FIREBASE_CONFIG = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT.firebaseapp.com",
+  databaseURL:       "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+// Firebase config 미설정 시 localStorage 전용 모드로 폴백
+let fbDB = null;
+const FB_REF = 'mc';
+let _lastLocalSave = 0;
+let _syncReady     = false;
+
+if (FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY') {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbDB = firebase.database();
+    console.log('[Firebase] ✅ 연동됨');
+  } catch(e) {
+    console.warn('[Firebase] 초기화 실패 — localStorage 전용 모드:', e);
+  }
+} else {
+  console.log('[Firebase] ⚠️ config 미설정 — localStorage 전용 모드');
+}
+
 // ══ 데이터 ══
 let PRODUCTS  = [];
 let RECORDS   = [];
@@ -792,20 +839,61 @@ let selectedCodeEmoji    = '🔴';
 // ══ 유틸 ══
 const TOTAL_MIN_VAL = 720;
 
-// ══ 로컬 저장 ══
+// ══ 저장 / 불러오기 (Firebase + localStorage 이중화) ══
 function saveData() {
   localStorage.setItem('mc_products',   JSON.stringify(PRODUCTS));
   localStorage.setItem('mc_records',    JSON.stringify(RECORDS));
   localStorage.setItem('mc_loss_codes', JSON.stringify(LOSS_CODES));
+  if (!fbDB) return;
+  _lastLocalSave = Date.now();
+  fbDB.ref(FB_REF).set({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES })
+    .catch(e => console.warn('[Firebase] 저장 실패:', e));
 }
 
-function loadData() {
+function _applyLocal() {
   const p = localStorage.getItem('mc_products');
   const r = localStorage.getItem('mc_records');
   const c = localStorage.getItem('mc_loss_codes');
   if (p) PRODUCTS   = JSON.parse(p);
   if (r) RECORDS    = JSON.parse(r);
   if (c) LOSS_CODES = JSON.parse(c);
+}
+
+function loadData(callback) {
+  if (!fbDB) { _applyLocal(); callback(); return; }
+  fbDB.ref(FB_REF).once('value').then(snap => {
+    const d = snap.val();
+    if (d) {
+      if (Array.isArray(d.products))  PRODUCTS   = d.products;
+      if (Array.isArray(d.records))   RECORDS    = d.records;
+      if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
+    } else {
+      _applyLocal();
+      if (PRODUCTS.length || RECORDS.length) saveData();
+    }
+    callback();
+    setupRealtimeSync();
+  }).catch(() => {
+    _applyLocal();
+    callback();
+  });
+}
+
+function setupRealtimeSync() {
+  if (!fbDB) return;
+  fbDB.ref(FB_REF).on('value', snap => {
+    if (Date.now() - _lastLocalSave < 2000) return;
+    const d = snap.val();
+    if (!d) return;
+    if (Array.isArray(d.products))  PRODUCTS   = d.products;
+    if (Array.isArray(d.records))   RECORDS    = d.records;
+    if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
+    renderDashboard(); renderHistory();
+    renderProductList(); renderCodeList(); renderCodeTable();
+    syncProductSelect();
+    if (_syncReady) showToast('🔄 다른 기기에서 동기화됨');
+    _syncReady = true;
+  });
 }
 
 function oeeClass(v) {
@@ -1450,6 +1538,48 @@ function renderProductList() {
     </div>`).join('');
 }
 
+// ══ 데이터 내보내기 / 가져오기 ══
+function exportData() {
+  const data = {
+    version:    1,
+    exportedAt: new Date().toISOString(),
+    products:   PRODUCTS,
+    records:    RECORDS,
+    lossCodes:  LOSS_CODES
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `mc-data-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📤 내보내기 완료!');
+}
+
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      if (Array.isArray(d.products))  PRODUCTS   = d.products;
+      if (Array.isArray(d.records))   RECORDS    = d.records;
+      if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
+      saveData();
+      renderDashboard(); renderHistory();
+      renderProductList(); renderCodeList(); renderCodeTable();
+      syncProductSelect();
+      showToast('📥 가져오기 완료! (' + PRODUCTS.length + '개 품번 / ' + RECORDS.length + '건 실적)');
+    } catch {
+      showToast('⚠️ 파일 형식 오류 — mc-data-*.json 파일만 가능합니다');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
 function syncProductSelect() {
   // 커스텀 드롭다운 — 별도 동기화 불필요 (filterProductDropdown이 PRODUCTS를 실시간 참조)
 }
@@ -1730,14 +1860,15 @@ function applyTheme(theme) {
 // ══ INIT ══
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme(localStorage.getItem('mc_theme') || 'dark');
-  loadData();
   initHeader();
-  renderCodeTable();
-  renderCodeList();
-  renderProductList();
-  syncProductSelect();
-  renderDashboard();
-  renderHistory();
+  loadData(() => {
+    renderCodeTable();
+    renderCodeList();
+    renderProductList();
+    syncProductSelect();
+    renderDashboard();
+    renderHistory();
+  });
 });
 
 // ══ Service Worker 등록 ══

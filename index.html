@@ -130,16 +130,17 @@ optgroup{color:var(--muted);font-style:normal}
 /* CODE TABLE */
 .code-table{width:100%;border-collapse:separate;border-spacing:0 4px}
 .code-table th{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:4px 8px;text-align:left}
-.code-row td{background:var(--bg2);padding:8px 10px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-.code-row td:first-child{border-left:1px solid var(--border);border-radius:8px 0 0 8px}
-.code-row td:last-child{border-right:1px solid var(--border);border-radius:0 8px 8px 0}
+.code-row td{background:var(--bg2);padding:8px 10px;border-top:1px solid var(--border)}
+.code-row td:first-child{border-left:1px solid var(--border);border-radius:8px 0 0 0}
+.code-row td:last-child{border-right:1px solid var(--border);border-radius:0 8px 0 0}
+.code-note-row td{background:var(--bg2);padding:2px 10px 8px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0 0 8px 8px}
 .code-pill{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;background:var(--border);display:inline-block}
 .code-name{font-size:14px;font-weight:500}
 .time-input-small{width:80px;text-align:right;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;padding:5px 8px;outline:none;transition:border .2s}
 .time-input-small:focus{border-color:var(--accent2)}
-.note-input-small{width:100%;background:var(--bg3);border:1px dashed rgba(255,255,255,0.15);border-radius:4px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:11px;padding:3px 6px;outline:none;margin-top:4px;box-sizing:border-box;transition:border .2s,color .2s}
-.note-input-small:focus{border-color:var(--accent);border-style:solid}
-.note-input-small::placeholder{color:var(--muted);opacity:0.6}
+.note-input-small{flex:1;min-width:0;background:var(--bg);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:12px;padding:4px 8px;outline:none;box-sizing:border-box;transition:border .2s}
+.note-input-small:focus{border-color:var(--accent)}
+.note-input-small::placeholder{color:var(--muted);opacity:0.7}
 .remaining-badge{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
 .remaining-badge.ok{background:rgba(127,255,107,0.1);color:var(--accent3)}
 .remaining-badge.over{background:rgba(255,64,96,0.1);color:var(--danger)}
@@ -1161,14 +1162,21 @@ function renderCodeTable() {
     tr.className = 'code-row';
     tr.innerHTML = `
       <td><span class="code-pill" style="color:${c.color}">${c.emoji} ${c.code}</span></td>
-      <td class="code-name">
-        <div>${c.name}${badge}</div>
-        <input type="text" class="note-input-small" id="note_${c.code}" placeholder="📝 사유 입력...">
-      </td>
+      <td class="code-name">${c.name}${badge}</td>
       <td style="text-align:right">
         <input type="number" class="time-input-small" id="time_${c.code}" placeholder="0" min="0" max="${TOTAL_MIN}" oninput="calcOEE()">
       </td>`;
     tbody.appendChild(tr);
+    const noteRow = document.createElement('tr');
+    noteRow.className = 'code-note-row';
+    noteRow.innerHTML = `
+      <td colspan="3">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:var(--muted);flex-shrink:0;white-space:nowrap">📝 사유</span>
+          <input type="text" class="note-input-small" id="note_${c.code}" placeholder="손실 사유를 입력하세요...">
+        </div>
+      </td>`;
+    tbody.appendChild(noteRow);
   });
 }
 
@@ -1318,9 +1326,14 @@ function resetInputForm() {
 
 function filterCodeTable() {
   const kw = document.getElementById('codeSearch').value.trim().toLowerCase();
+  let lastVisible = true;
   document.querySelectorAll('#codeTableBody tr').forEach(tr => {
-    const text = tr.textContent.toLowerCase();
-    tr.style.display = (!kw || text.includes(kw)) ? '' : 'none';
+    if (tr.classList.contains('code-note-row')) {
+      tr.style.display = lastVisible ? '' : 'none';
+    } else {
+      lastVisible = !kw || tr.textContent.toLowerCase().includes(kw);
+      tr.style.display = lastVisible ? '' : 'none';
+    }
   });
 }
 
@@ -1349,7 +1362,7 @@ function openRecordEditModal(idx) {
       </div>
       <input type="text" class="note-input-small" id="edit_note_${c.code}"
         value="${existing && existing.note ? existing.note.replace(/"/g,'&quot;') : ''}"
-        placeholder="📝 사유 입력...">
+        placeholder="📝 사유 입력..." style="margin-top:6px;width:100%">
     </div>`;
   }).join('');
   calcEditOEE();

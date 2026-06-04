@@ -137,9 +137,9 @@ optgroup{color:var(--muted);font-style:normal}
 .code-name{font-size:14px;font-weight:500}
 .time-input-small{width:80px;text-align:right;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;padding:5px 8px;outline:none;transition:border .2s}
 .time-input-small:focus{border-color:var(--accent2)}
-.note-input-small{width:100%;background:transparent;border:1px dashed var(--border);border-radius:4px;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:11px;padding:3px 6px;outline:none;margin-top:4px;box-sizing:border-box;transition:border .2s,color .2s}
-.note-input-small:focus{border-color:var(--accent);border-style:solid;color:var(--text)}
-.note-input-small::placeholder{color:var(--border)}
+.note-input-small{width:100%;background:var(--bg3);border:1px dashed rgba(255,255,255,0.15);border-radius:4px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:11px;padding:3px 6px;outline:none;margin-top:4px;box-sizing:border-box;transition:border .2s,color .2s}
+.note-input-small:focus{border-color:var(--accent);border-style:solid}
+.note-input-small::placeholder{color:var(--muted);opacity:0.6}
 .remaining-badge{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
 .remaining-badge.ok{background:rgba(127,255,107,0.1);color:var(--accent3)}
 .remaining-badge.over{background:rgba(255,64,96,0.1);color:var(--danger)}
@@ -177,6 +177,8 @@ optgroup{color:var(--muted);font-style:normal}
 .hist-row td{padding:10px;background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:14px}
 .hist-row td:first-child{border-left:1px solid var(--border);border-radius:8px 0 0 8px}
 .hist-row td:last-child{border-right:1px solid var(--border);border-radius:0 8px 8px 0}
+.hist-row.dash-active td{background:rgba(0,212,255,0.07);border-color:var(--accent)}
+.hist-row.dash-active td:first-child{border-left-width:3px}
 .badge-ok{color:var(--accent3);font-weight:700}
 .badge-warn{color:var(--warn);font-weight:700}
 .badge-bad{color:var(--danger);font-weight:700}
@@ -275,6 +277,10 @@ optgroup{color:var(--muted);font-style:normal}
 
   <!-- 품번 필터 -->
   <select class="dash-filter-select" id="dashFilterSelect" onchange="setDashFilter(this.value)"></select>
+  <div id="dashFilterReset" style="display:none;align-items:center;gap:8px;margin:6px 0 -2px">
+    <span style="font-size:12px;color:var(--accent);font-weight:700" id="dashFilterLabel"></span>
+    <button onclick="setDashFilter('all')" style="border:none;background:rgba(0,212,255,0.12);color:var(--accent);border-radius:20px;font-size:11px;font-weight:700;padding:3px 10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif">✕ 전체 보기</button>
+  </div>
 
   <!-- OEE 합계 -->
   <div class="oee-total">
@@ -1050,20 +1056,31 @@ function renderDashboard() {
   document.getElementById('timeBar').innerHTML    = segs;
   document.getElementById('timeLegend').innerHTML = legs;
 
+  // 필터 리셋 버튼
+  const resetEl = document.getElementById('dashFilterReset');
+  if (dashFilter !== 'all') {
+    resetEl.style.display = 'flex';
+    const p = PRODUCTS.find(x => x.no === dashFilter);
+    document.getElementById('dashFilterLabel').textContent = `📌 ${dashFilter}${p ? ' · ' + p.name : ''}`;
+  } else {
+    resetEl.style.display = 'none';
+  }
+
   // 최근 5건 (필터 적용)
   const recent = [...base].reverse().slice(0, 5);
-  document.getElementById('recentRecordsTbody').innerHTML = recent.map((r, i) => {
-    const realIdx = RECORDS.length - 1 - i;
+  document.getElementById('recentRecordsTbody').innerHTML = recent.map(r => {
+    const realIdx = RECORDS.indexOf(r);
     const oeeVal  = (r.avail * r.perf * r.qual * 100).toFixed(1);
     const dc      = r.defect > 0 ? (r.defect / r.qty * 100 > 3 ? 'color:var(--danger)' : 'color:var(--warn)') : 'color:var(--accent3)';
-    return `<tr class="hist-row">
+    const active  = dashFilter !== 'all' ? ' dash-active' : '';
+    return `<tr class="hist-row${active}" onclick="setDashFilter('${r.partNo}')" style="cursor:pointer">
       <td>${r.date.slice(5)}</td>
       <td>${shiftLabel(r.shift)}</td>
       <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${r.partNo}</td>
       <td>${r.qty.toLocaleString()}</td>
       <td style="${dc}">${r.defect}</td>
       <td class="${oeeClass(+oeeVal)}">${oeeVal}%</td>
-      <td style="display:flex;gap:4px">
+      <td onclick="event.stopPropagation()" style="display:flex;gap:4px">
         <button class="btn btn-sm" onclick="openRecordEditModal(${realIdx})" style="color:var(--accent2);border-color:var(--accent2);padding:4px 6px">✏️</button>
         <button class="btn btn-sm" onclick="openRecordDeleteModal(${realIdx})" style="color:var(--danger);border-color:var(--danger);padding:4px 6px">🗑️</button>
       </td>

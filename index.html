@@ -799,13 +799,13 @@ optgroup{color:var(--muted);font-style:normal}
 // ══ Firebase 설정 ══
 // 👉 Firebase 콘솔 → 프로젝트 설정 → 웹 앱의 config를 아래에 붙여넣으세요
 const FIREBASE_CONFIG = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey:            "AIzaSyCH0rVHqxdpGGzjuaniBV_RvXXqOh5KjsA",
+  authDomain:        "mc-card-3101f.firebaseapp.com",
+  databaseURL:       "https://mc-card-3101f-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "mc-card-3101f",
+  storageBucket:     "mc-card-3101f.firebasestorage.app",
+  messagingSenderId: "88794907200",
+  appId:             "1:88794907200:web:2bd121feab8c3f1ac195a5"
 };
 // Firebase config 미설정 시 localStorage 전용 모드로 폴백
 let fbDB = null;
@@ -818,6 +818,7 @@ if (FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY') {
     firebase.initializeApp(FIREBASE_CONFIG);
     fbDB = firebase.database();
     console.log('[Firebase] ✅ 연동됨');
+    setTimeout(() => showToast('☁️ Firebase 연결됨'), 800);
   } catch(e) {
     console.warn('[Firebase] 초기화 실패 — localStorage 전용 모드:', e);
   }
@@ -861,7 +862,8 @@ function saveData() {
   if (!fbDB) return;
   _lastLocalSave = Date.now();
   fbDB.ref(FB_REF).set({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES })
-    .catch(e => console.warn('[Firebase] 저장 실패:', e));
+    .then(() => showToast('✅ 저장됨'))
+    .catch(e => { console.warn('[Firebase] 저장 실패:', e); showToast('❌ 저장 실패'); });
 }
 
 function _applyLocal() {

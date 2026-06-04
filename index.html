@@ -137,6 +137,9 @@ optgroup{color:var(--muted);font-style:normal}
 .code-name{font-size:14px;font-weight:500}
 .time-input-small{width:80px;text-align:right;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;padding:5px 8px;outline:none;transition:border .2s}
 .time-input-small:focus{border-color:var(--accent2)}
+.note-input-small{width:100%;background:transparent;border:1px dashed var(--border);border-radius:4px;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:11px;padding:3px 6px;outline:none;margin-top:4px;box-sizing:border-box;transition:border .2s,color .2s}
+.note-input-small:focus{border-color:var(--accent);border-style:solid;color:var(--text)}
+.note-input-small::placeholder{color:var(--border)}
 .remaining-badge{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
 .remaining-badge.ok{background:rgba(127,255,107,0.1);color:var(--accent3)}
 .remaining-badge.over{background:rgba(255,64,96,0.1);color:var(--danger)}
@@ -394,7 +397,7 @@ optgroup{color:var(--muted);font-style:normal}
           <span><span class="lbl-emoji">📅</span> 날짜</span>
           <span id="inputWeekBadge" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);font-weight:700"></span>
         </div>
-        <input type="date" class="field-input" id="inputDate" oninput="onDateInput()">
+        <input type="date" class="field-input" id="inputDate" oninput="onDateInput()" onchange="onDateInput()">
       </div>
       <div class="field-wrap">
         <div class="field-label"><span class="lbl-emoji">🔄</span> 교대</div>
@@ -1042,7 +1045,7 @@ function renderDashboard() {
     const info = LOSS_CODES.find(x => x.code === lc.code) || { name: lc.code };
     const col  = lossColors[i % lossColors.length];
     segs += `<div class="time-seg" style="flex:${lc.min};background:${col}"></div>`;
-    legs += `<div class="legend-item"><div class="legend-dot" style="background:${col}"></div>${info.name} <b style="color:${col}">${lc.min}분</b></div>`;
+    legs += `<div class="legend-item"><div class="legend-dot" style="background:${col}"></div>${info.name} <b style="color:${col}">${lc.min}분</b>${lc.note ? ` <span style="color:var(--muted);font-size:10px">(${lc.note})</span>` : ''}</div>`;
   });
   document.getElementById('timeBar').innerHTML    = segs;
   document.getElementById('timeLegend').innerHTML = legs;
@@ -1141,7 +1144,10 @@ function renderCodeTable() {
     tr.className = 'code-row';
     tr.innerHTML = `
       <td><span class="code-pill" style="color:${c.color}">${c.emoji} ${c.code}</span></td>
-      <td class="code-name">${c.name}${badge}</td>
+      <td class="code-name">
+        <div>${c.name}${badge}</div>
+        <input type="text" class="note-input-small" id="note_${c.code}" placeholder="📝 사유 입력...">
+      </td>
       <td style="text-align:right">
         <input type="number" class="time-input-small" id="time_${c.code}" placeholder="0" min="0" max="${TOTAL_MIN}" oninput="calcOEE()">
       </td>`;
@@ -1240,8 +1246,9 @@ function saveRecord() {
   let plannedSum = 0;
   const lossCodes = LOSS_CODES.map(c => {
     const min = +(document.getElementById('time_' + c.code)?.value) || 0;
+    const note = (document.getElementById('note_' + c.code)?.value || '').trim();
     if (c.type === 'planned') plannedSum += min;
-    return { code: c.code, min, type: c.type };
+    return { code: c.code, min, type: c.type, note };
   }).filter(x => x.min > 0);
 
   const lossTotal = lossCodes.reduce((a, c) => a + c.min, 0);
@@ -1269,12 +1276,14 @@ function saveRecord() {
 }
 
 function resetInputForm() {
-  ['inputQty','inputDefect','inputRunTime','inputGood','inputProductName'].forEach(id => {
+  ['inputQty','inputDefect','inputRunTime','inputGood','inputProduct','inputProductName','inputCT'].forEach(id => {
     document.getElementById(id).value = '';
   });
   LOSS_CODES.forEach(c => {
     const el = document.getElementById('time_' + c.code);
     if (el) el.value = '';
+    const nel = document.getElementById('note_' + c.code);
+    if (nel) nel.value = '';
   });
   const el = document.getElementById('inputRunTime');
   el.dataset.manual = '';
@@ -1314,11 +1323,16 @@ function openRecordEditModal(idx) {
     const existing = (r.lossCodes || []).find(x => x.code === c.code);
     const badge = c.type === 'planned'
       ? `<span style="font-size:9px;background:rgba(68,170,255,0.15);color:#66bbff;padding:1px 5px;border-radius:8px">OEE제외</span>` : '';
-    return `<div style="display:flex;align-items:center;gap:8px">
-      <span class="code-pill" style="color:${c.color};flex-shrink:0">${c.emoji} ${c.code}</span>
-      <span style="flex:1;font-size:12px">${c.name} ${badge}</span>
-      <input type="number" class="time-input-small" id="edit_time_${c.code}"
-        value="${existing ? existing.min : 0}" min="0" max="${TOTAL_MIN}" oninput="calcEditOEE()">
+    return `<div style="display:flex;flex-direction:column;gap:3px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="code-pill" style="color:${c.color};flex-shrink:0">${c.emoji} ${c.code}</span>
+        <span style="flex:1;font-size:12px">${c.name} ${badge}</span>
+        <input type="number" class="time-input-small" id="edit_time_${c.code}"
+          value="${existing ? existing.min : 0}" min="0" max="${TOTAL_MIN}" oninput="calcEditOEE()">
+      </div>
+      <input type="text" class="note-input-small" id="edit_note_${c.code}"
+        value="${existing && existing.note ? existing.note.replace(/"/g,'&quot;') : ''}"
+        placeholder="📝 사유 입력...">
     </div>`;
   }).join('');
   calcEditOEE();
@@ -1363,8 +1377,9 @@ function saveRecordEdit() {
   let plannedSum = 0;
   const lossCodes = LOSS_CODES.map(c => {
     const min = +(document.getElementById('edit_time_' + c.code)?.value) || 0;
+    const note = (document.getElementById('edit_note_' + c.code)?.value || '').trim();
     if (c.type === 'planned') plannedSum += min;
-    return { code: c.code, min, type: c.type };
+    return { code: c.code, min, type: c.type, note };
   }).filter(x => x.min > 0);
   const plannedOpMin = TOTAL_MIN - plannedSum;
   const avail = Math.min(runMin / plannedOpMin, 1);

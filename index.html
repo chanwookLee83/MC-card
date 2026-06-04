@@ -122,8 +122,9 @@ main{padding:16px;max-width:1400px;margin:0 auto}
 .field-wrap{display:flex;flex-direction:column;gap:5px}
 .field-label{font: size 12px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:4px}
 .lbl-emoji{font-size:12px}
-.field-input{background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;padding:10px 12px;outline:none;transition:border .2s,box-shadow .2s;width:100%}
+.field-input{background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;padding:10px 12px;outline:none;transition:border .2s,box-shadow .2s;width:100%;color-scheme:dark}
 .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,0.1)}
+input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.8) brightness(1.2);cursor:pointer}
 select.field-input{cursor:pointer}
 optgroup{color:var(--muted);font-style:normal}
 
@@ -179,6 +180,7 @@ optgroup{color:var(--muted);font-style:normal}
 .hist-row td:first-child{border-left:1px solid var(--border);border-radius:8px 0 0 8px}
 .hist-row td:last-child{border-right:1px solid var(--border);border-radius:0 8px 8px 0}
 .hist-row.dash-active td{background:rgba(0,212,255,0.07);border-color:var(--accent)}
+.hist-group-hdr td{background:rgba(0,212,255,0.08);color:var(--accent);font-size:11px;font-weight:700;padding:5px 12px;letter-spacing:1px;border-radius:6px;border:1px solid rgba(0,212,255,0.2)}
 .hist-row.dash-active td:first-child{border-left-width:3px}
 .badge-ok{color:var(--accent3);font-weight:700}
 .badge-warn{color:var(--warn);font-weight:700}
@@ -523,9 +525,10 @@ optgroup{color:var(--muted);font-style:normal}
     <button class="period-btn" onclick="setPeriod('week',this)">📆 주별</button>
     <button class="period-btn" onclick="setPeriod('month',this)">🗓️ 월별</button>
   </div>
-  <div style="overflow-x:auto">
+  <select class="dash-filter-select" id="histFilterSelect" onchange="setHistFilter(this.value)" style="margin-top:8px"></select>
+  <div style="overflow-x:auto;margin-top:8px">
     <table class="hist-table">
-      <thead><tr><th>📅</th><th>🔄</th><th>🏷️ 품번</th><th>📦 생산</th><th>❌ 불량</th><th>⏱️ 가용</th><th>⚡ 성능</th><th>✅ 품질</th><th>🏆 OEE</th><th></th></tr></thead>
+      <thead><tr><th>📅 날짜</th><th>🔄</th><th>🏷️ 품번</th><th>📦 생산</th><th>❌ 불량</th><th>⏱️ 가용</th><th>⚡ 성능</th><th>✅ 품질</th><th>🏆 OEE</th><th></th></tr></thead>
       <tbody id="historyTbody"></tbody>
     </table>
   </div>
@@ -964,9 +967,34 @@ function showToast(msg) {
 }
 
 // ══ 기간 토글 ══
+let histPeriod = 'day';
+let histFilter = 'all';
+
 function setPeriod(p, btn) {
-  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  histPeriod = p;
+  document.querySelectorAll('#page-history .period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  renderHistory();
+}
+
+function setHistFilter(partNo) {
+  histFilter = partNo;
+  renderHistory();
+}
+
+function buildHistFilterSelect() {
+  const parts = [...new Set(RECORDS.map(r => r.partNo))];
+  const sel = document.getElementById('histFilterSelect');
+  if (!sel) return;
+  sel.innerHTML = [
+    `<option value="all">📋 전체 품번</option>`,
+    ...parts.map(no => {
+      const p = PRODUCTS.find(x => x.no === no);
+      const label = p ? `${p.emoji || '🏷️'} ${no} · ${p.name}` : no;
+      return `<option value="${no}" ${histFilter === no ? 'selected' : ''}>${label}</option>`;
+    })
+  ].join('');
+  sel.value = histFilter;
 }
 
 // ══ 링 차트 ══
@@ -1093,20 +1121,50 @@ function renderDashboard() {
 //  이력 조회
 // ══════════════════════════════
 function renderHistory() {
+  buildHistFilterSelect();
   const tbody = document.getElementById('historyTbody');
-  if (!RECORDS.length) {
+
+  const base = histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter);
+
+  if (!base.length) {
     tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--muted)">📭 저장된 실적이 없습니다</td></tr>`;
-    renderCodeAnalysis();
+    renderCodeAnalysis([]);
     return;
   }
-  tbody.innerHTML = [...RECORDS].reverse().map((r, i) => {
-    const realIdx = RECORDS.length - 1 - i;
-    const oeeVal  = (r.avail * r.perf * r.qual * 100).toFixed(1);
-    const dc      = r.defect > 0 ? (r.defect / r.qty * 100 > 3 ? 'color:var(--danger)' : 'color:var(--warn)') : 'color:var(--accent3)';
-    return `<tr class="hist-row">
+
+  const sorted = [...base].reverse();
+  const rows = [];
+  let lastGroupKey = null;
+
+  sorted.forEach(r => {
+    const realIdx = RECORDS.indexOf(r);
+    let groupKey, groupLabel;
+    if (histPeriod === 'week') {
+      groupKey = getWeekKey(r.date);
+      const [yr, wk] = groupKey.split('-W');
+      groupLabel = `📅 ${yr}년 ${+wk}주차`;
+    } else if (histPeriod === 'month') {
+      groupKey = r.date.slice(0, 7);
+      const [yr, mo] = groupKey.split('-');
+      groupLabel = `📅 ${yr}년 ${+mo}월`;
+    } else {
+      groupKey = r.date;
+      groupLabel = `📅 ${r.date}`;
+    }
+
+    if (groupKey !== lastGroupKey) {
+      lastGroupKey = groupKey;
+      rows.push(`<tr class="hist-group-hdr"><td colspan="10">${groupLabel}</td></tr>`);
+    }
+
+    const oeeVal = (r.avail * r.perf * r.qual * 100).toFixed(1);
+    const dc     = r.defect > 0 ? (r.defect / r.qty * 100 > 3 ? 'color:var(--danger)' : 'color:var(--warn)') : 'color:var(--accent3)';
+    const p      = PRODUCTS.find(x => x.no === r.partNo);
+    const partCell = `<div style="font-family:'JetBrains Mono',monospace;font-size:11px">${r.partNo}</div>${p ? `<div style="font-size:10px;color:var(--muted)">${p.name}</div>` : ''}`;
+    rows.push(`<tr class="hist-row">
       <td>${r.date.slice(5)}</td>
-      <td>${shiftLabel(r.shift)}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${r.partNo}</td>
+      <td style="font-size:12px">${shiftLabel(r.shift)}</td>
+      <td>${partCell}</td>
       <td>${r.qty.toLocaleString()}</td>
       <td style="${dc}">${r.defect}</td>
       <td>${(r.avail*100).toFixed(1)}%</td>
@@ -1117,34 +1175,54 @@ function renderHistory() {
         <button class="btn btn-sm" onclick="openRecordEditModal(${realIdx})" style="color:var(--accent2);border-color:var(--accent2);padding:4px 6px">✏️</button>
         <button class="btn btn-sm" onclick="openRecordDeleteModal(${realIdx})" style="color:var(--danger);border-color:var(--danger);padding:4px 6px">🗑️</button>
       </td>
-    </tr>`;
-  }).join('');
-  renderCodeAnalysis();
+    </tr>`);
+  });
+
+  tbody.innerHTML = rows.join('');
+  renderCodeAnalysis(base);
 }
 
-function renderCodeAnalysis() {
+function renderCodeAnalysis(filteredRecords) {
   const el = document.getElementById('codeAnalysis');
-  if (!RECORDS.length) { el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted)">📭 데이터 없음</div>`; return; }
-  const totals = {};
-  RECORDS.forEach(r => (r.lossCodes || []).forEach(lc => { totals[lc.code] = (totals[lc.code] || 0) + lc.min; }));
-  const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  const recs = filteredRecords !== undefined ? filteredRecords : RECORDS;
+  if (!recs.length) { el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted)">📭 데이터 없음</div>`; return; }
+
+  const codeMap = {};
+  recs.forEach(r => (r.lossCodes || []).forEach(lc => {
+    if (!codeMap[lc.code]) codeMap[lc.code] = { min: 0, notes: new Set() };
+    codeMap[lc.code].min += lc.min;
+    if (lc.note && lc.note.trim()) codeMap[lc.code].notes.add(lc.note.trim());
+  }));
+
+  const entries = Object.entries(codeMap).sort((a, b) => b[1].min - a[1].min);
   if (!entries.length) { el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted)">손실 코드 입력 없음</div>`; return; }
-  const maxMin = entries[0][1];
+
+  const maxMin = entries[0][1].min;
   const colors = ['var(--danger)','var(--accent2)','var(--warn)','var(--accent)','var(--accent3)','#8866ff','var(--muted)'];
-  el.innerHTML = entries.map(([code, min], i) => {
-    const lc  = LOSS_CODES.find(x => x.code === code) || { name: code, emoji: '⚫' };
-    const pct = (min / maxMin * 100).toFixed(0);
-    const col = colors[i % colors.length];
-    return `<div class="product-item" style="cursor:default">
-      <div class="product-icon">${lc.emoji}</div>
-      <div class="product-info">
-        <div class="product-num" style="color:${col}">${code} · ${lc.name}</div>
-        <div class="product-name">총 손실: ${min}분</div>
-        <div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:${col};border-radius:3px"></div>
+
+  el.innerHTML = entries.map(([code, data], i) => {
+    const lc   = LOSS_CODES.find(x => x.code === code) || { name: code, emoji: '⚫' };
+    const pct  = (data.min / maxMin * 100).toFixed(0);
+    const col  = colors[i % colors.length];
+    const notes = [...data.notes];
+    const notesHtml = notes.length
+      ? `<div style="margin-top:5px;font-size:11px;color:var(--muted);line-height:1.6">
+          ${notes.map(n => `<span style="display:inline-block;background:rgba(255,255,255,0.06);border-radius:4px;padding:1px 6px;margin:1px 2px 1px 0">📝 ${n}</span>`).join('')}
+         </div>`
+      : '';
+    return `<div class="product-item" style="cursor:default;flex-direction:column;align-items:stretch;gap:0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="product-icon">${lc.emoji}</div>
+        <div class="product-info">
+          <div class="product-num" style="color:${col}">${code} · ${lc.name}</div>
+          <div class="product-name">총 손실: ${data.min}분</div>
+          <div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${col};border-radius:3px"></div>
+          </div>
+          ${notesHtml}
         </div>
+        <div style="font-family:'JetBrains Mono';font-size:18px;font-weight:700;color:${col};flex-shrink:0">${pct}%</div>
       </div>
-      <div style="font-family:'JetBrains Mono';font-size:18px;font-weight:700;color:${col}">${pct}%</div>
     </div>`;
   }).join('');
 }
@@ -1795,7 +1873,7 @@ function calcGroup(recs) {
 function renderAnalysisChart(items) {
   const el = document.getElementById('analysisChart');
   if (!items.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">데이터 없음</div>'; return; }
-  const barH = 30, gap = 8, labelW = 110, rightPad = 60;
+  const barH = 30, gap = 8, labelW = 160, rightPad = 56;
   const W = el.clientWidth || 320;
   const chartW = Math.max(60, W - labelW - rightPad);
   const H = items.length * (barH + gap) + 16;
@@ -1803,9 +1881,9 @@ function renderAnalysisChart(items) {
     const y = 8 + i * (barH + gap);
     const w = Math.max(0, Math.min(d.oee, 100) / 100 * chartW);
     const col = d.oee >= 85 ? '#7fff6b' : d.oee >= 70 ? '#ffcc00' : '#ff4060';
-    const lbl = d.label.length > 14 ? d.label.slice(0,13)+'…' : d.label;
+    const lbl = d.label.length > 18 ? d.label.slice(0,17)+'…' : d.label;
     return `
-      <text x="${labelW-6}" y="${y+barH/2+5}" text-anchor="end" fill="var(--muted)" font-size="11" font-family="'Noto Sans KR',sans-serif">${lbl}</text>
+      <text x="${labelW-6}" y="${y+barH/2+5}" text-anchor="end" fill="var(--muted)" font-size="11" font-family="'JetBrains Mono',monospace">${lbl}</text>
       <rect x="${labelW}" y="${y}" width="${chartW}" height="${barH}" rx="5" fill="var(--border)"/>
       <rect x="${labelW}" y="${y}" width="${w}" height="${barH}" rx="5" fill="${col}" opacity="0.9"/>
       <text x="${labelW+w+6}" y="${y+barH/2+5}" fill="${col}" font-size="12" font-weight="700" font-family="'JetBrains Mono',monospace">${d.oee.toFixed(1)}%</text>

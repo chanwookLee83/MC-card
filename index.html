@@ -230,15 +230,29 @@ optgroup{color:var(--muted);font-style:normal}
   .form-row.three{grid-template-columns:1fr 1fr}
   .oee-total-value{font-size:40px}
   .hist-table{font-size:12px}
-  /* 이력 테이블: 가용·성능·품질 컬럼 숨기고 OEE만 표시 */
-  .hist-table th:nth-child(6),
-  .hist-table th:nth-child(7),
-  .hist-table th:nth-child(8),
-  .hist-table td:nth-child(6),
-  .hist-table td:nth-child(7),
-  .hist-table td:nth-child(8){display:none}
+  /* 이력 조회 테이블만: 가용(6)·성능(7)·품질(8) 숨김 → OEE만 표시 */
+  #page-history .hist-table th:nth-child(6),
+  #page-history .hist-table th:nth-child(7),
+  #page-history .hist-table th:nth-child(8),
+  #page-history .hist-table td:nth-child(6),
+  #page-history .hist-table td:nth-child(7),
+  #page-history .hist-table td:nth-child(8){display:none}
   /* 품번 셀 줄임표 */
   .hist-table td:nth-child(3){max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+/* Z Fold 외부화면 등 매우 좁은 화면(≤390px) */
+@media(max-width:390px){
+  .hist-table{font-size:11px}
+  /* 이력: 교대(2)·불량(5) 추가 숨김 → 날짜·품번·생산·OEE·액션만 */
+  #page-history .hist-table th:nth-child(2),
+  #page-history .hist-table td:nth-child(2),
+  #page-history .hist-table th:nth-child(5),
+  #page-history .hist-table td:nth-child(5){display:none}
+  /* 대시보드 최근실적: 교대(2) 숨김 */
+  #page-dashboard .hist-table th:nth-child(2),
+  #page-dashboard .hist-table td:nth-child(2){display:none}
+  /* 액션 버튼 축소 */
+  .btn-sm{padding:3px 5px;font-size:10px}
 }
 @media(min-width:769px){
   .bottom-nav{display:none}

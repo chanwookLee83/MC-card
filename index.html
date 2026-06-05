@@ -52,7 +52,7 @@
   --bnav-bg:rgba(240,244,248,0.96);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;min-height:100dvh;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;min-height:100dvh;overflow-x:clip}
 
 /* HEADER */
 header{position:sticky;top:0;z-index:100;background:var(--header-bg);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;gap:12px;height:56px}
@@ -175,9 +175,10 @@ optgroup{color:var(--muted);font-style:normal}
 .period-btn.active{background:var(--accent);color:#000;font-weight:700;box-shadow:0 2px 12px rgba(0,212,255,0.3)}
 
 /* HISTORY TABLE(최근실적) */
+.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%}
 .hist-table{width:100%;border-collapse:separate;border-spacing:0 4px}
-.hist-table th{font-size:16px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:4px 10px;font-weight:700;text-align:left}
-.hist-row td{padding:10px;background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:14px}
+.hist-table th{font-size:16px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:4px 10px;font-weight:700;text-align:left;white-space:nowrap}
+.hist-row td{padding:10px;background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:14px;white-space:nowrap}
 .hist-row td:first-child{border-left:1px solid var(--border);border-radius:8px 0 0 8px}
 .hist-row td:last-child{border-right:1px solid var(--border);border-radius:0 8px 8px 0}
 .hist-row.dash-active td{background:rgba(0,212,255,0.07);border-color:var(--accent)}
@@ -230,28 +231,9 @@ optgroup{color:var(--muted);font-style:normal}
   .form-row.three{grid-template-columns:1fr 1fr}
   .oee-total-value{font-size:40px}
   .hist-table{font-size:12px}
-  /* 이력 조회 테이블만: 가용(6)·성능(7)·품질(8) 숨김 → OEE만 표시 */
-  #page-history .hist-table th:nth-child(6),
-  #page-history .hist-table th:nth-child(7),
-  #page-history .hist-table th:nth-child(8),
-  #page-history .hist-table td:nth-child(6),
-  #page-history .hist-table td:nth-child(7),
-  #page-history .hist-table td:nth-child(8){display:none}
-  /* 품번 셀 줄임표 */
-  .hist-table td:nth-child(3){max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 }
-/* Z Fold 외부화면 등 매우 좁은 화면(≤390px) */
 @media(max-width:390px){
   .hist-table{font-size:11px}
-  /* 이력: 교대(2)·불량(5) 추가 숨김 → 날짜·품번·생산·OEE·액션만 */
-  #page-history .hist-table th:nth-child(2),
-  #page-history .hist-table td:nth-child(2),
-  #page-history .hist-table th:nth-child(5),
-  #page-history .hist-table td:nth-child(5){display:none}
-  /* 대시보드 최근실적: 교대(2) 숨김 */
-  #page-dashboard .hist-table th:nth-child(2),
-  #page-dashboard .hist-table td:nth-child(2){display:none}
-  /* 액션 버튼 축소 */
   .btn-sm{padding:3px 5px;font-size:10px}
 }
 @media(min-width:769px){
@@ -393,9 +375,9 @@ optgroup{color:var(--muted);font-style:normal}
 
   <!-- 최근 실적 -->
   <div class="section-title">📋 최근 실적</div>
-  <div style="overflow-x:auto">
+  <div class="tbl-scroll">
     <table class="hist-table">
-      <thead><tr><th>📅 날짜</th><th>🔄 교대</th><th>🏷️ 품번</th><th>📦 생산</th><th>❌ 불량</th><th>🏆 OEE</th><th></th></tr></thead>
+      <thead><tr><th>📅 날짜</th><th>🔄 교대</th><th>🏷️ 품번</th><th>📦 생산</th><th>❌ 불량</th><th>🏆 OEE</th><th>👤 입력자</th><th></th></tr></thead>
       <tbody id="recentRecordsTbody"></tbody>
     </table>
   </div>
@@ -424,7 +406,7 @@ optgroup{color:var(--muted);font-style:normal}
   <!-- 기본정보 -->
   <div class="form-card">
     <div style="font-size:14px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:12px">📋 기본 정보</div>
-    <div class="form-row">
+    <div class="form-row three">
       <div class="field-wrap">
         <div class="field-label" style="justify-content:space-between">
           <span><span class="lbl-emoji">📅</span> 날짜</span>
@@ -448,6 +430,10 @@ optgroup{color:var(--muted);font-style:normal}
             <option value="night">🌙 야간</option>
           </optgroup>
         </select>
+      </div>
+      <div class="field-wrap">
+        <div class="field-label"><span class="lbl-emoji">👤</span> 입력자</div>
+        <input type="text" class="field-input" id="inputBy" placeholder="이름 입력">
       </div>
     </div>
     <div class="form-row full">
@@ -550,9 +536,9 @@ optgroup{color:var(--muted);font-style:normal}
     <button class="period-btn" onclick="setPeriod('month',this)">🗓️ 월별</button>
   </div>
   <select class="dash-filter-select" id="histFilterSelect" onchange="setHistFilter(this.value)" style="margin-top:8px"></select>
-  <div style="overflow-x:auto;margin-top:8px">
+  <div class="tbl-scroll" style="margin-top:8px">
     <table class="hist-table">
-      <thead><tr><th>📅 날짜</th><th>🔄</th><th>🏷️ 품번</th><th>📦 생산</th><th>❌ 불량</th><th>⏱️ 가용</th><th>⚡ 성능</th><th>✅ 품질</th><th>🏆 OEE</th><th></th></tr></thead>
+      <thead><tr><th>📅 날짜</th><th>🔄</th><th>🏷️ 품번</th><th>📦 생산</th><th>❌ 불량</th><th>⏱️ 가용</th><th>⚡ 성능</th><th>✅ 품질</th><th>🏆 OEE</th><th>👤 입력자</th><th></th></tr></thead>
       <tbody id="historyTbody"></tbody>
     </table>
   </div>
@@ -722,6 +708,10 @@ optgroup{color:var(--muted);font-style:normal}
         <div class="field-label">▶️ 가동시간 (분)</div>
         <input type="number" class="field-input" id="editRunMin" oninput="calcEditOEE()" style="color:var(--accent)">
       </div>
+      <div class="field-wrap">
+        <div class="field-label">👤 입력자</div>
+        <input type="text" class="field-input" id="editInputBy" placeholder="이름 입력">
+      </div>
       <div style="font-size:10px;color:var(--muted);font-weight:700;margin-top:4px">🔴 손실 코드 시간 (분)</div>
       <div id="editCodeRows" style="display:flex;flex-direction:column;gap:6px"></div>
       <!-- 미리보기 -->
@@ -779,7 +769,7 @@ optgroup{color:var(--muted);font-style:normal}
 
   <!-- 분석 테이블 -->
   <div class="section-title" style="font-size:16px" id="analysisTableTitle">상세 데이터</div>
-  <div style="overflow-x:auto">
+  <div class="tbl-scroll">
     <table class="hist-table">
       <thead id="analysisTableHead"></thead>
       <tbody id="analysisTableBody"></tbody>
@@ -1069,7 +1059,7 @@ function renderDashboard() {
     updateRing('ringQual', 'ringQualVal',  0);
     document.getElementById('timeBarWrap').style.display = 'none';
     document.getElementById('recentRecordsTbody').innerHTML =
-      `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">📭 저장된 실적이 없습니다</td></tr>`;
+      `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">📭 저장된 실적이 없습니다</td></tr>`;
     return;
   }
 
@@ -1135,6 +1125,7 @@ function renderDashboard() {
       <td>${r.qty.toLocaleString()}</td>
       <td style="${dc}">${r.defect}</td>
       <td class="${oeeClass(+oeeVal)}">${oeeVal}%</td>
+      <td style="color:var(--muted);font-size:12px">${r.inputBy || '-'}</td>
       <td onclick="event.stopPropagation()" style="display:flex;gap:4px">
         <button class="btn btn-sm" onclick="openRecordEditModal(${realIdx})" style="color:var(--accent2);border-color:var(--accent2);padding:4px 6px">✏️</button>
         <button class="btn btn-sm" onclick="openRecordDeleteModal(${realIdx})" style="color:var(--danger);border-color:var(--danger);padding:4px 6px">🗑️</button>
@@ -1153,7 +1144,7 @@ function renderHistory() {
   const base = histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter);
 
   if (!base.length) {
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--muted)">📭 저장된 실적이 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--muted)">📭 저장된 실적이 없습니다</td></tr>`;
     renderCodeAnalysis([]);
     return;
   }
@@ -1180,7 +1171,7 @@ function renderHistory() {
 
     if (groupKey !== lastGroupKey) {
       lastGroupKey = groupKey;
-      rows.push(`<tr class="hist-group-hdr"><td colspan="10">${groupLabel}</td></tr>`);
+      rows.push(`<tr class="hist-group-hdr"><td colspan="11">${groupLabel}</td></tr>`);
     }
 
     const oeeVal = (r.avail * r.perf * r.qual * 100).toFixed(1);
@@ -1197,6 +1188,7 @@ function renderHistory() {
       <td>${(r.perf*100).toFixed(1)}%</td>
       <td>${(r.qual*100).toFixed(1)}%</td>
       <td class="${oeeClass(+oeeVal)}">${oeeVal}%</td>
+      <td style="color:var(--muted);font-size:12px">${r.inputBy || '-'}</td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm" onclick="openRecordEditModal(${realIdx})" style="color:var(--accent2);border-color:var(--accent2);padding:4px 6px">✏️</button>
         <button class="btn btn-sm" onclick="openRecordDeleteModal(${realIdx})" style="color:var(--danger);border-color:var(--danger);padding:4px 6px">🗑️</button>
@@ -1358,13 +1350,14 @@ function calcOEE() {
 }
 
 function saveRecord() {
-  const date   = document.getElementById('inputDate').value;
-  const shift  = document.getElementById('inputShift').value;
-  const partNo = document.getElementById('inputProduct').value;
-  const qty    = +document.getElementById('inputQty').value     || 0;
-  const defect = +document.getElementById('inputDefect').value  || 0;
-  const runMin = +document.getElementById('inputRunTime').value || 0;
-  const ct     = +document.getElementById('inputCT').value      || 0;
+  const date    = document.getElementById('inputDate').value;
+  const shift   = document.getElementById('inputShift').value;
+  const partNo  = document.getElementById('inputProduct').value;
+  const qty     = +document.getElementById('inputQty').value     || 0;
+  const defect  = +document.getElementById('inputDefect').value  || 0;
+  const runMin  = +document.getElementById('inputRunTime').value || 0;
+  const ct      = +document.getElementById('inputCT').value      || 0;
+  const inputBy = document.getElementById('inputBy').value.trim();
 
   if (!partNo) { showToast('⚠️ 품번을 선택하세요');    return; }
   if (!qty)    { showToast('⚠️ 생산수량을 입력하세요'); return; }
@@ -1396,7 +1389,7 @@ function saveRecord() {
   const perf  = Math.min((qty * ct / 60) / runMin, 1);
   const qual  = qty > 0 ? good / qty : 0;
 
-  RECORDS.push({ date, shift, partNo, qty, defect, good, runMin, ct, avail, perf, qual, lossCodes });
+  RECORDS.push({ date, shift, partNo, qty, defect, good, runMin, ct, avail, perf, qual, lossCodes, inputBy });
   saveData();
   showToast('💾 실적이 저장되었습니다!');
   resetInputForm();
@@ -1452,6 +1445,7 @@ function openRecordEditModal(idx) {
   document.getElementById('editQty').value       = r.qty;
   document.getElementById('editDefect').value    = r.defect;
   document.getElementById('editRunMin').value    = r.runMin;
+  document.getElementById('editInputBy').value   = r.inputBy || '';
   const wrap = document.getElementById('editCodeRows');
   wrap.innerHTML = LOSS_CODES.map(c => {
     const existing = (r.lossCodes || []).find(x => x.code === c.code);
@@ -1500,11 +1494,12 @@ function calcEditOEE() {
 }
 
 function saveRecordEdit() {
-  const idx    = +document.getElementById('editRecordIdx').value;
-  const r      = RECORDS[idx];
-  const qty    = +document.getElementById('editQty').value    || 0;
-  const defect = +document.getElementById('editDefect').value || 0;
-  const runMin = +document.getElementById('editRunMin').value || 0;
+  const idx     = +document.getElementById('editRecordIdx').value;
+  const r       = RECORDS[idx];
+  const qty     = +document.getElementById('editQty').value    || 0;
+  const defect  = +document.getElementById('editDefect').value || 0;
+  const runMin  = +document.getElementById('editRunMin').value || 0;
+  const inputBy = (document.getElementById('editInputBy')?.value || '').trim();
   if (!qty || !runMin) { showToast('⚠️ 수량/가동시간 확인'); return; }
   const ct   = PRODUCTS.find(p => p.no === r.partNo)?.ct || r.ct || 0;
   const good = Math.max(0, qty - defect);
@@ -1519,7 +1514,7 @@ function saveRecordEdit() {
   const avail = Math.min(runMin / plannedOpMin, 1);
   const perf  = ct ? Math.min((qty * ct / 60) / runMin, 1) : r.perf;
   const qual  = qty > 0 ? good / qty : 0;
-  RECORDS[idx] = { ...r, date: document.getElementById('editDate').value, shift: document.getElementById('editShift').value, qty, defect, good, runMin, avail, perf, qual, lossCodes };
+  RECORDS[idx] = { ...r, date: document.getElementById('editDate').value, shift: document.getElementById('editShift').value, qty, defect, good, runMin, avail, perf, qual, lossCodes, inputBy };
   saveData();
   showToast('✏️ 실적이 수정되었습니다!');
   closeRecordEditModal();

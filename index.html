@@ -184,6 +184,8 @@ optgroup{color:var(--muted);font-style:normal}
 .hist-row.dash-active td{background:rgba(0,212,255,0.07);border-color:var(--accent)}
 .hist-group-hdr td{background:rgba(0,212,255,0.08);color:var(--accent);font-size:11px;font-weight:700;padding:5px 12px;letter-spacing:1px;border-radius:6px;border:1px solid rgba(0,212,255,0.2)}
 .hist-row.dash-active td:first-child{border-left-width:3px}
+.hist-row.hist-selected td{background:rgba(0,212,255,0.13);border-color:var(--accent)}
+.hist-row.hist-selected td:first-child{border-left:3px solid var(--accent)}
 .badge-ok{color:var(--accent3);font-weight:700}
 .badge-warn{color:var(--warn);font-weight:700}
 .badge-bad{color:var(--danger);font-weight:700}
@@ -542,7 +544,7 @@ optgroup{color:var(--muted);font-style:normal}
       <tbody id="historyTbody"></tbody>
     </table>
   </div>
-  <div class="section-title" style="margin-top:20px">🔍 코드별 손실 분석</div>
+  <div class="section-title" style="margin-top:20px" id="codeAnalysisTitle">🔍 코드별 손실 분석</div>
   <div id="codeAnalysis"></div>
 </div>
 
@@ -985,6 +987,7 @@ function showToast(msg) {
 // ══ 기간 토글 ══
 let histPeriod = 'day';
 let histFilter = 'all';
+let selectedHistIdx = null;
 
 function setPeriod(p, btn) {
   histPeriod = p;
@@ -1138,6 +1141,7 @@ function renderDashboard() {
 //  이력 조회
 // ══════════════════════════════
 function renderHistory() {
+  selectedHistIdx = null;
   buildHistFilterSelect();
   const tbody = document.getElementById('historyTbody');
 
@@ -1178,7 +1182,7 @@ function renderHistory() {
     const dc     = r.defect > 0 ? (r.defect / r.qty * 100 > 3 ? 'color:var(--danger)' : 'color:var(--warn)') : 'color:var(--accent3)';
     const p      = PRODUCTS.find(x => x.no === r.partNo);
     const partCell = `<div style="font-family:'JetBrains Mono',monospace;font-size:11px">${r.partNo}</div>${p ? `<div style="font-size:10px;color:var(--muted)">${p.name}</div>` : ''}`;
-    rows.push(`<tr class="hist-row">
+    rows.push(`<tr class="hist-row" style="cursor:pointer" onclick="selectHistoryRow(event,${realIdx})">
       <td>${r.date.slice(5)}</td>
       <td style="font-size:12px">${shiftLabel(r.shift)}</td>
       <td>${partCell}</td>
@@ -1200,8 +1204,20 @@ function renderHistory() {
   renderCodeAnalysis(base);
 }
 
-function renderCodeAnalysis(filteredRecords) {
+function renderCodeAnalysis(filteredRecords, contextRecord) {
   const el = document.getElementById('codeAnalysis');
+  const titleEl = document.getElementById('codeAnalysisTitle');
+
+  if (titleEl) {
+    if (contextRecord) {
+      const p = PRODUCTS.find(x => x.no === contextRecord.partNo);
+      const nameStr = p ? ` · ${p.name}` : '';
+      titleEl.innerHTML = `🔍 <span style="font-size:13px;letter-spacing:0;font-family:'Noto Sans KR',sans-serif;font-weight:600">${contextRecord.date} ${shiftLabel(contextRecord.shift)} · ${contextRecord.partNo}${nameStr}</span>&nbsp;<button onclick="clearHistorySelection()" style="font-size:11px;background:rgba(0,212,255,0.12);border:1px solid var(--accent);color:var(--accent);border-radius:5px;padding:2px 9px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-weight:700;letter-spacing:0">✕ 전체보기</button>`;
+    } else {
+      titleEl.textContent = '🔍 코드별 손실 분석';
+    }
+  }
+
   const recs = filteredRecords !== undefined ? filteredRecords : RECORDS;
   if (!recs.length) { el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted)">📭 데이터 없음</div>`; return; }
 
@@ -1243,6 +1259,30 @@ function renderCodeAnalysis(filteredRecords) {
       </div>
     </div>`;
   }).join('');
+}
+
+function selectHistoryRow(event, idx) {
+  if (event.target.closest('button')) return;
+  if (selectedHistIdx === idx) {
+    selectedHistIdx = null;
+  } else {
+    selectedHistIdx = idx;
+  }
+  document.querySelectorAll('#historyTbody .hist-row').forEach(tr => tr.classList.remove('hist-selected'));
+  if (selectedHistIdx !== null) {
+    event.currentTarget.classList.add('hist-selected');
+    renderCodeAnalysis([RECORDS[selectedHistIdx]], RECORDS[selectedHistIdx]);
+  } else {
+    const base = histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter);
+    renderCodeAnalysis(base, null);
+  }
+}
+
+function clearHistorySelection() {
+  selectedHistIdx = null;
+  document.querySelectorAll('#historyTbody .hist-row').forEach(tr => tr.classList.remove('hist-selected'));
+  const base = histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter);
+  renderCodeAnalysis(base, null);
 }
 
 // ══════════════════════════════

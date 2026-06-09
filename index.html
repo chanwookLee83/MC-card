@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -36,7 +36,7 @@
 <style>
 :root {
   --bg:#0a0f1e; --bg2:#111827; --bg3:#1a2235; --border:#1e2d45;
-  --accent:#00d4ff; --accent2:#ff6b35; --accent3:#7fff6b;
+  --accent:#00d4ff; --accent2:#ff6b35; --accent3:#02b420;
   --warn:#ffcc00; --danger:#ff4060;
   --text:#e8edf5; --muted:#6b7fa3; --card:#131c2e;
   --radius:12px; --radius-lg:20px;
@@ -1944,7 +1944,7 @@ function renderAnalysisChart(items) {
   const bars = items.map((d, i) => {
     const y = 8 + i * (barH + gap);
     const w = Math.max(0, Math.min(d.oee, 100) / 100 * chartW);
-    const col = d.oee >= 85 ? '#7fff6b' : d.oee >= 70 ? '#ffcc00' : '#ff4060';
+    const col = d.oee >= 85 ? 'var(--accent3)' : d.oee >= 70 ? 'var(--warn)' : 'var(--danger)';
     const lbl = d.label.length > 18 ? d.label.slice(0,17)+'…' : d.label;
     return `
       <text x="${labelW-6}" y="${y+barH/2+5}" text-anchor="end" fill="var(--muted)" font-size="11" font-family="'JetBrains Mono',monospace">${lbl}</text>
@@ -1969,7 +1969,7 @@ function renderAnalysis() {
     <div class="akpi-card"><div class="akpi-val" style="color:var(--accent)">${totalProds}</div><div class="akpi-lbl">🏷️ 등록 품번</div></div>
     <div class="akpi-card"><div class="akpi-val" style="color:var(--accent3)">${activeProds}</div><div class="akpi-lbl">✅ 실적 품번</div></div>
     <div class="akpi-card"><div class="akpi-val" style="color:var(--warn)">${inactiveProds}</div><div class="akpi-lbl">⏳ 미실적 품번</div></div>
-    <div class="akpi-card"><div class="akpi-val" style="color:${avgOEE>=85?'#7fff6b':avgOEE>=70?'#ffcc00':'#ff4060'}">${totalRecs ? avgOEE.toFixed(1)+'%' : '-'}</div><div class="akpi-lbl">🏆 평균 OEE</div></div>
+    <div class="akpi-card"><div class="akpi-val" style="color:var(${avgOEE>=85?'--accent3':avgOEE>=70?'--warn':'--danger'})">${totalRecs ? avgOEE.toFixed(1)+'%' : '-'}</div><div class="akpi-lbl">🏆 평균 OEE</div></div>
   `;
 
   if (!RECORDS.length) {

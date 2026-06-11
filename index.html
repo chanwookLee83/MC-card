@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -1263,23 +1263,80 @@ function renderCodeAnalysis(filteredRecords, contextRecord) {
 
 function selectHistoryRow(event, idx) {
   if (event.target.closest('button')) return;
+
+  // 기존 인라인 분석 행 제거
+  const prev = document.getElementById('histInlineAnalysis');
+  if (prev) prev.remove();
+
+  const allTrs = document.querySelectorAll('#historyTbody tr');
+
   if (selectedHistIdx === idx) {
+    // 같은 행 재클릭 → 전체 펼치기
     selectedHistIdx = null;
-  } else {
-    selectedHistIdx = idx;
-  }
-  document.querySelectorAll('#historyTbody .hist-row').forEach(tr => tr.classList.remove('hist-selected'));
-  if (selectedHistIdx !== null) {
-    event.currentTarget.classList.add('hist-selected');
-    renderCodeAnalysis([RECORDS[selectedHistIdx]], RECORDS[selectedHistIdx]);
-  } else {
+    allTrs.forEach(tr => tr.style.display = '');
+    document.querySelectorAll('#historyTbody .hist-row').forEach(tr => tr.classList.remove('hist-selected'));
     const base = histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter);
     renderCodeAnalysis(base, null);
+  } else {
+    selectedHistIdx = idx;
+
+    // 모든 행 접기
+    allTrs.forEach(tr => tr.style.display = 'none');
+
+    // 선택 행만 표시
+    const selectedTr = event.currentTarget;
+    selectedTr.style.display = '';
+    document.querySelectorAll('#historyTbody .hist-row').forEach(tr => tr.classList.remove('hist-selected'));
+    selectedTr.classList.add('hist-selected');
+
+    // 선택 행 바로 아래에 인라인 손실코드 분석 삽입
+    const inlineTr = document.createElement('tr');
+    inlineTr.id = 'histInlineAnalysis';
+    const td = document.createElement('td');
+    td.colSpan = 11;
+    td.style.cssText = 'padding:0;border:none;background:transparent';
+    inlineTr.appendChild(td);
+    selectedTr.insertAdjacentElement('afterend', inlineTr);
+    renderInlineCodeAnalysis(td, RECORDS[idx]);
+
+    // 바텀 분석 섹션도 동기화
+    renderCodeAnalysis([RECORDS[idx]], RECORDS[idx]);
   }
+}
+
+function renderInlineCodeAnalysis(container, record) {
+  const active = (record.lossCodes || []).filter(lc => lc.min > 0).sort((a, b) => b.min - a.min);
+  if (!active.length) {
+    container.innerHTML = `<div style="padding:10px 16px;color:var(--muted);font-size:12px;background:var(--bg3);border-bottom:2px solid var(--border)">손실 코드 입력 없음</div>`;
+    return;
+  }
+  const maxMin = active[0].min;
+  const colors = ['var(--danger)','var(--accent2)','var(--warn)','var(--accent)','var(--accent3)','#8866ff','var(--muted)'];
+  container.innerHTML = `<div style="padding:10px 12px;background:var(--bg3);border-bottom:2px solid var(--accent);display:flex;flex-direction:column;gap:7px">
+    <div style="font-size:10px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:2px">🔴 손실 코드</div>
+    ${active.map((lc, i) => {
+      const info = LOSS_CODES.find(x => x.code === lc.code) || { name: lc.code, emoji: '⚫' };
+      const pct  = Math.round(lc.min / maxMin * 100);
+      const col  = colors[i % colors.length];
+      const note = lc.note ? `<span style="font-size:10px;color:var(--muted);margin-left:4px">(${lc.note})</span>` : '';
+      return `<div style="display:flex;align-items:center;gap:8px">
+        <span style="flex-shrink:0;font-size:13px">${info.emoji}</span>
+        <span style="flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:${col};min-width:52px">${lc.code}</span>
+        <span style="font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${info.name}${note}</span>
+        <div style="width:70px;height:5px;background:var(--border);border-radius:3px;flex-shrink:0">
+          <div style="height:100%;width:${pct}%;background:${col};border-radius:3px"></div>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${col};flex-shrink:0;min-width:34px;text-align:right">${lc.min}분</span>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 function clearHistorySelection() {
   selectedHistIdx = null;
+  const prev = document.getElementById('histInlineAnalysis');
+  if (prev) prev.remove();
+  document.querySelectorAll('#historyTbody tr').forEach(tr => tr.style.display = '');
   document.querySelectorAll('#historyTbody .hist-row').forEach(tr => tr.classList.remove('hist-selected'));
   const base = histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter);
   renderCodeAnalysis(base, null);

@@ -367,7 +367,7 @@ optgroup{color:var(--muted);font-style:normal}
   </div>
 
   <!-- 생산 현황 -->
-  <div class="section-title">📦 생산 현황</div>
+  <div class="section-title" id="prodStatusTitle">📦 생산 현황</div>
   <div class="stats-row">
     <div class="stat-mini"><div class="stat-mini-val" style="color:var(--accent)" id="dTotalQty">-</div><div class="stat-mini-lbl">🏭 생산수량</div></div>
     <div class="stat-mini"><div class="stat-mini-val" style="color:var(--accent3)" id="dGoodQty">-</div><div class="stat-mini-lbl">✅ 양품수량</div></div>
@@ -1027,9 +1027,16 @@ function updateRing(id, valId, pct) {
 //  대시보드
 // ══════════════════════════════
 let dashFilter = 'all';
+let selectedRecIdx = null;
 
 function setDashFilter(partNo) {
   dashFilter = partNo;
+  selectedRecIdx = null;
+  renderDashboard();
+}
+
+function selectDashRecord(idx) {
+  selectedRecIdx = (selectedRecIdx === idx) ? null : idx;
   renderDashboard();
 }
 
@@ -1067,8 +1074,16 @@ function renderDashboard() {
   }
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const todayBase = base.filter(r => r.date === todayStr);
-  const calc = todayBase.length ? todayBase : base;
+  let calc, last;
+  const selRec = (selectedRecIdx !== null) ? RECORDS[selectedRecIdx] : null;
+  if (selRec) {
+    calc = [selRec];
+    last = selRec;
+  } else {
+    const todayBase = base.filter(r => r.date === todayStr);
+    calc = todayBase.length ? todayBase : base;
+    last = [...base].reverse()[0];
+  }
 
   const sumQty    = calc.reduce((a, r) => a + r.qty, 0);
   const sumDefect = calc.reduce((a, r) => a + r.defect, 0);
@@ -1088,8 +1103,15 @@ function renderDashboard() {
   updateRing('ringPerf',  'ringPerfVal',  avgPerf);
   updateRing('ringQual',  'ringQualVal',  avgQual);
 
-  // 시간 분포 바 (필터 기준 최근 실적)
-  const last = [...base].reverse()[0];
+  // 생산 현황 타이틀 — 선택된 레코드 배지
+  const titleEl = document.getElementById('prodStatusTitle');
+  if (selRec) {
+    titleEl.innerHTML = `📦 생산 현황 <span style="font-size:11px;color:var(--accent);background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.3);border-radius:12px;padding:2px 9px;font-weight:700;vertical-align:middle">${selRec.date.slice(5)} ${shiftLabel(selRec.shift)} · ${selRec.partNo}</span>`;
+  } else {
+    titleEl.textContent = '📦 생산 현황';
+  }
+
+  // 시간 분포 바
   const lossColors = ['#ff4060','#ff6b35','#ffcc00','#8866ff','#44aaff','#66bbff','#88ccff','#6b7fa3'];
   document.getElementById('timeBarWrap').style.display = 'block';
   let segs = `<div class="time-seg" style="flex:${last.runMin};background:linear-gradient(90deg,#00d4ff,#0099cc)"></div>`;
@@ -1120,8 +1142,8 @@ function renderDashboard() {
     const realIdx = RECORDS.indexOf(r);
     const oeeVal  = (r.avail * r.perf * r.qual * 100).toFixed(1);
     const dc      = r.defect > 0 ? (r.defect / r.qty * 100 > 3 ? 'color:var(--danger)' : 'color:var(--warn)') : 'color:var(--accent3)';
-    const active  = dashFilter !== 'all' ? ' dash-active' : '';
-    return `<tr class="hist-row${active}" onclick="setDashFilter('${r.partNo}')" style="cursor:pointer">
+    const active  = (selectedRecIdx === realIdx) ? ' dash-active' : '';
+    return `<tr class="hist-row${active}" onclick="selectDashRecord(${realIdx})" style="cursor:pointer">
       <td>${r.date.slice(5)}</td>
       <td>${shiftLabel(r.shift)}</td>
       <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${r.partNo}</td>

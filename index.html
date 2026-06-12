@@ -1374,28 +1374,44 @@ function clearHistorySelection() {
 function renderCodeTable() {
   const tbody = document.getElementById('codeTableBody');
   tbody.innerHTML = '';
-  LOSS_CODES.forEach(c => {
-    const badge = c.type === 'planned'
-      ? `<span style="font-size:9px;background:rgba(68,170,255,0.15);color:#66bbff;padding:1px 5px;border-radius:8px;margin-left:4px">OEE제외</span>` : '';
-    const tr = document.createElement('tr');
-    tr.className = 'code-row';
-    tr.innerHTML = `
-      <td><span class="code-pill" style="color:${c.color}">${c.emoji} ${c.code}</span></td>
-      <td class="code-name">${c.name}${badge}</td>
-      <td style="text-align:right">
-        <input type="number" class="time-input-small" id="time_${c.code}" placeholder="0" min="0" max="${TOTAL_MIN}" oninput="calcOEE()">
-      </td>`;
-    tbody.appendChild(tr);
-    const noteRow = document.createElement('tr');
-    noteRow.className = 'code-note-row';
-    noteRow.innerHTML = `
-      <td colspan="3">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:10px;color:var(--muted);flex-shrink:0;white-space:nowrap">📝 사유</span>
-          <input type="text" class="note-input-small" id="note_${c.code}" placeholder="손실 사유를 입력하세요...">
-        </div>
-      </td>`;
-    tbody.appendChild(noteRow);
+  const groups = [
+    { type:'loss',    label:'🔴 설비손실', note:'OEE 반영',  color:'#ff4060', bg:'rgba(255,64,96,0.07)',   border:'rgba(255,64,96,0.2)'   },
+    { type:'planned', label:'🔵 계획손실', note:'OEE 제외',  color:'#44aaff', bg:'rgba(68,170,255,0.07)',  border:'rgba(68,170,255,0.2)'  },
+    { type:'other',   label:'🟠 기타손실', note:'OEE 반영',  color:'#ff6b35', bg:'rgba(255,107,53,0.07)', border:'rgba(255,107,53,0.2)' },
+  ];
+  groups.forEach(g => {
+    const codes = LOSS_CODES.filter(c => c.type === g.type);
+    if (!codes.length) return;
+    const hdr = document.createElement('tr');
+    hdr.className = 'code-group-hdr';
+    hdr.dataset.groupType = g.type;
+    hdr.innerHTML = `<td colspan="3" style="background:${g.bg};color:${g.color};font-size:11px;font-weight:700;padding:5px 10px;letter-spacing:0.5px;border-radius:6px;border:1px solid ${g.border}">${g.label} <span style="font-weight:400;opacity:0.75">${g.note} · ${codes.length}개</span></td>`;
+    tbody.appendChild(hdr);
+    codes.forEach(c => {
+      const badge = c.type === 'planned'
+        ? `<span style="font-size:9px;background:rgba(68,170,255,0.15);color:#66bbff;padding:1px 5px;border-radius:8px;margin-left:4px">OEE제외</span>` : '';
+      const tr = document.createElement('tr');
+      tr.className = 'code-row';
+      tr.dataset.groupType = g.type;
+      tr.innerHTML = `
+        <td><span class="code-pill" style="color:${c.color}">${c.emoji} ${c.code}</span></td>
+        <td class="code-name">${c.name}${badge}</td>
+        <td style="text-align:right">
+          <input type="number" class="time-input-small" id="time_${c.code}" placeholder="0" min="0" max="${TOTAL_MIN}" oninput="calcOEE()">
+        </td>`;
+      tbody.appendChild(tr);
+      const noteRow = document.createElement('tr');
+      noteRow.className = 'code-note-row';
+      noteRow.dataset.groupType = g.type;
+      noteRow.innerHTML = `
+        <td colspan="3">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;color:var(--muted);flex-shrink:0;white-space:nowrap">📝 사유</span>
+            <input type="text" class="note-input-small" id="note_${c.code}" placeholder="손실 사유를 입력하세요...">
+          </div>
+        </td>`;
+      tbody.appendChild(noteRow);
+    });
   });
 }
 
@@ -1546,14 +1562,20 @@ function resetInputForm() {
 
 function filterCodeTable() {
   const kw = document.getElementById('codeSearch').value.trim().toLowerCase();
-  let lastVisible = true;
-  document.querySelectorAll('#codeTableBody tr').forEach(tr => {
-    if (tr.classList.contains('code-note-row')) {
-      tr.style.display = lastVisible ? '' : 'none';
-    } else {
-      lastVisible = !kw || tr.textContent.toLowerCase().includes(kw);
-      tr.style.display = lastVisible ? '' : 'none';
-    }
+  if (!kw) {
+    document.querySelectorAll('#codeTableBody tr').forEach(tr => tr.style.display = '');
+    return;
+  }
+  const groupHit = {};
+  document.querySelectorAll('#codeTableBody tr.code-row').forEach(tr => {
+    const visible = tr.textContent.toLowerCase().includes(kw);
+    tr.style.display = visible ? '' : 'none';
+    const note = tr.nextElementSibling;
+    if (note && note.classList.contains('code-note-row')) note.style.display = visible ? '' : 'none';
+    if (visible && tr.dataset.groupType) groupHit[tr.dataset.groupType] = true;
+  });
+  document.querySelectorAll('#codeTableBody tr.code-group-hdr').forEach(tr => {
+    tr.style.display = groupHit[tr.dataset.groupType] ? '' : 'none';
   });
 }
 
@@ -1570,21 +1592,32 @@ function openRecordEditModal(idx) {
   document.getElementById('editRunMin').value    = r.runMin;
   document.getElementById('editInputBy').value   = r.inputBy || '';
   const wrap = document.getElementById('editCodeRows');
-  wrap.innerHTML = LOSS_CODES.map(c => {
-    const existing = (r.lossCodes || []).find(x => x.code === c.code);
-    const badge = c.type === 'planned'
-      ? `<span style="font-size:9px;background:rgba(68,170,255,0.15);color:#66bbff;padding:1px 5px;border-radius:8px">OEE제외</span>` : '';
-    return `<div style="display:flex;flex-direction:column;gap:3px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="code-pill" style="color:${c.color};flex-shrink:0">${c.emoji} ${c.code}</span>
-        <span style="flex:1;font-size:12px">${c.name} ${badge}</span>
-        <input type="number" class="time-input-small" id="edit_time_${c.code}"
-          value="${existing ? existing.min : 0}" min="0" max="${TOTAL_MIN}" oninput="calcEditOEE()">
-      </div>
-      <input type="text" class="note-input-small" id="edit_note_${c.code}"
-        value="${existing && existing.note ? existing.note.replace(/"/g,'&quot;') : ''}"
-        placeholder="📝 사유 입력..." style="margin-top:6px;width:100%">
-    </div>`;
+  const editGroups = [
+    { type:'loss',    label:'🔴 설비손실', note:'OEE 반영',  color:'#ff4060', bg:'rgba(255,64,96,0.07)',   border:'rgba(255,64,96,0.2)'   },
+    { type:'planned', label:'🔵 계획손실', note:'OEE 제외',  color:'#44aaff', bg:'rgba(68,170,255,0.07)',  border:'rgba(68,170,255,0.2)'  },
+    { type:'other',   label:'🟠 기타손실', note:'OEE 반영',  color:'#ff6b35', bg:'rgba(255,107,53,0.07)', border:'rgba(255,107,53,0.2)' },
+  ];
+  wrap.innerHTML = editGroups.map(g => {
+    const codes = LOSS_CODES.filter(c => c.type === g.type);
+    if (!codes.length) return '';
+    const hdr = `<div style="font-size:11px;font-weight:700;color:${g.color};background:${g.bg};border:1px solid ${g.border};border-radius:6px;padding:4px 10px;margin-top:4px">${g.label} <span style="font-weight:400;opacity:0.75">${g.note} · ${codes.length}개</span></div>`;
+    const rows = codes.map(c => {
+      const existing = (r.lossCodes || []).find(x => x.code === c.code);
+      const badge = c.type === 'planned'
+        ? `<span style="font-size:9px;background:rgba(68,170,255,0.15);color:#66bbff;padding:1px 5px;border-radius:8px">OEE제외</span>` : '';
+      return `<div style="display:flex;flex-direction:column;gap:3px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="code-pill" style="color:${c.color};flex-shrink:0">${c.emoji} ${c.code}</span>
+          <span style="flex:1;font-size:12px">${c.name} ${badge}</span>
+          <input type="number" class="time-input-small" id="edit_time_${c.code}"
+            value="${existing ? existing.min : 0}" min="0" max="${TOTAL_MIN}" oninput="calcEditOEE()">
+        </div>
+        <input type="text" class="note-input-small" id="edit_note_${c.code}"
+          value="${existing && existing.note ? existing.note.replace(/"/g,'&quot;') : ''}"
+          placeholder="📝 사유 입력..." style="margin-top:6px;width:100%">
+      </div>`;
+    }).join('');
+    return hdr + rows;
   }).join('');
   calcEditOEE();
   document.getElementById('recordEditModal').style.display = 'flex';

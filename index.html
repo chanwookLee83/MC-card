@@ -714,7 +714,11 @@ optgroup{color:var(--muted);font-style:normal}
         <div class="field-label">👤 입력자</div>
         <input type="text" class="field-input" id="editInputBy" placeholder="이름 입력">
       </div>
-      <div style="font-size:10px;color:var(--muted);font-weight:700;margin-top:4px">🔴 손실 코드 시간 (분)</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;margin-bottom:2px">
+        <div style="font-size:10px;color:var(--muted);font-weight:700">🔴 손실 코드 시간 (분)</div>
+        <div class="remaining-badge ok" id="editRemainBadge">잔여 720분</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">가동 + 손실코드 합계 = 720분</div>
       <div id="editCodeRows" style="display:flex;flex-direction:column;gap:6px"></div>
       <!-- 미리보기 -->
       <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px">
@@ -1598,10 +1602,20 @@ function calcEditOEE() {
   const runMin = +document.getElementById('editRunMin').value || 0;
   const ct     = r ? (PRODUCTS.find(p => p.no === r.partNo)?.ct || r.ct || 0) : 0;
   const good   = Math.max(0, qty - defect);
-  let plannedSum = 0;
+  let lossSum = 0, plannedSum = 0;
   LOSS_CODES.forEach(c => {
-    if (c.type === 'planned') plannedSum += +(document.getElementById('edit_time_' + c.code)?.value) || 0;
+    const v = +(document.getElementById('edit_time_' + c.code)?.value) || 0;
+    if (c.type === 'planned') plannedSum += v; else lossSum += v;
   });
+
+  const totalUsed = runMin + lossSum + plannedSum;
+  const remain    = TOTAL_MIN - totalUsed;
+  const rb = document.getElementById('editRemainBadge');
+  if (rb) {
+    rb.textContent = remain >= 0 ? `잔여 ${remain}분` : `초과 ${-remain}분`;
+    rb.className   = 'remaining-badge ' + (remain >= 0 ? 'ok' : 'over');
+  }
+
   const plannedOpMin = TOTAL_MIN - plannedSum;
   const avail = runMin ? Math.min(runMin / plannedOpMin, 1) : 0;
   const perf  = (qty && runMin && ct) ? Math.min((qty * ct / 60) / runMin, 1) : 0;
@@ -1622,13 +1636,24 @@ function saveRecordEdit() {
   if (!qty || !runMin) { showToast('⚠️ 수량/가동시간 확인'); return; }
   const ct   = PRODUCTS.find(p => p.no === r.partNo)?.ct || r.ct || 0;
   const good = Math.max(0, qty - defect);
-  let plannedSum = 0;
+  let lossSum = 0, plannedSum = 0;
   const lossCodes = LOSS_CODES.map(c => {
     const min = +(document.getElementById('edit_time_' + c.code)?.value) || 0;
     const note = (document.getElementById('edit_note_' + c.code)?.value || '').trim();
-    if (c.type === 'planned') plannedSum += min;
+    if (c.type === 'planned') plannedSum += min; else lossSum += min;
     return { code: c.code, min, type: c.type, note };
   }).filter(x => x.min > 0);
+
+  const totalUsed = runMin + lossSum + plannedSum;
+  if (totalUsed !== TOTAL_MIN) {
+    const diff = totalUsed - TOTAL_MIN;
+    document.getElementById('timeWarnUsed').textContent = `합계 ${totalUsed}분 / 720분`;
+    document.getElementById('timeWarnUsed').style.color = diff > 0 ? 'var(--danger)' : 'var(--accent)';
+    document.getElementById('timeWarnMsg').textContent  = diff > 0 ? `▲ ${diff}분 초과 — 시간을 줄여주세요` : `▼ ${-diff}분 부족 — 시간을 추가해주세요`;
+    document.getElementById('timeWarnModal').style.display = 'flex';
+    return;
+  }
+
   const plannedOpMin = TOTAL_MIN - plannedSum;
   const avail = Math.min(runMin / plannedOpMin, 1);
   const perf  = ct ? Math.min((qty * ct / 60) / runMin, 1) : r.perf;

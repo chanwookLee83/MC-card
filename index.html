@@ -1920,12 +1920,25 @@ let _slideTimer    = null;
 let _slideProgress = null;
 let _slideStart    = 0;
 
-function linesPerPage() {
-  return window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 3 : 2;
+const SLIDE_STATUS_ORDER = { running: 0, stopped: 1, idle: 2, waiting: 3 };
+
+function getSortedLinesForSlide() {
+  const lastRecDate = line => {
+    const rec = [...RECORDS].reverse().find(r => (line.partNos || []).includes(r.partNo));
+    return rec ? rec.date : '';
+  };
+  return LINES
+    .map((line, idx) => ({ line, idx }))
+    .sort((a, b) => {
+      const sa = SLIDE_STATUS_ORDER[a.line.status || 'idle'] ?? 2;
+      const sb = SLIDE_STATUS_ORDER[b.line.status || 'idle'] ?? 2;
+      if (sa !== sb) return sa - sb;
+      return lastRecDate(b.line).localeCompare(lastRecDate(a.line));
+    });
 }
 
 function slideTotalPages() {
-  return Math.max(1, Math.ceil(LINES.length / linesPerPage()));
+  return Math.max(1, LINES.length);
 }
 
 function updateSlideDots() {
@@ -1967,15 +1980,18 @@ function renderSlicedLineStatus() {
   }
   if (empty) empty.style.display = 'none';
 
-  const start = _slidePage * linesPerPage();
-  const slice = _slideActive ? LINES.slice(start, start + linesPerPage()) : LINES;
-  const idxOffset = _slideActive ? start : 0;
-
-  if (grid) grid.innerHTML = slice.map((line, i) => buildLineCard(line, idxOffset + i)).join('');
+  if (_slideActive) {
+    const sorted = getSortedLinesForSlide();
+    _slidePage = Math.min(_slidePage, sorted.length - 1);
+    const { line, idx } = sorted[_slidePage];
+    if (grid) grid.innerHTML = buildLineCard(line, idx, true);
+  } else {
+    if (grid) grid.innerHTML = LINES.map((line, i) => buildLineCard(line, i, false)).join('');
+  }
   updateSlideDots();
 }
 
-function buildLineCard(line, idx) {
+function buildLineCard(line, idx, solo = false) {
   const cfg      = LINE_STATUS_CFG[line.status || 'idle'];
   const lineRecs = [...RECORDS].reverse().filter(r => (line.partNos || []).includes(r.partNo));
   const lastRec  = lineRecs[0];
@@ -2019,13 +2035,13 @@ function buildLineCard(line, idx) {
     </div>`;
   }).join('');
   return `
-  <div class="line-card" style="border-color:${cfg.border}">
-    <div class="line-status-banner" data-status="${line.status||'idle'}" style="background:${cfg.bg};color:${cfg.color};border-bottom-color:${cfg.border}">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:22px">${cfg.icon}</span>
-        <span style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px">${line.name}</span>
+  <div class="line-card" style="border-color:${cfg.border}${solo ? ';border-width:2px' : ''}">
+    <div class="line-status-banner" data-status="${line.status||'idle'}" style="background:${cfg.bg};color:${cfg.color};border-bottom-color:${cfg.border};padding:${solo?'14px 18px':'10px 14px'}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:${solo?'32px':'22px'}">${cfg.icon}</span>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:${solo?'28px':'20px'};letter-spacing:1px">${line.name}</span>
       </div>
-      <div style="font-size:14px;font-weight:700;letter-spacing:0.5px">${cfg.label}</div>
+      <div style="font-size:${solo?'18px':'14px'};font-weight:700;letter-spacing:0.5px">${cfg.label}</div>
     </div>
     <div class="line-card-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start">
@@ -2044,9 +2060,9 @@ function buildLineCard(line, idx) {
             <button class="worker-add-confirm" onclick="confirmAddWorker(${idx})">✓</button>
           </div>
         </div>
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
-          <div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:var(--warn);line-height:1">${oeeSum}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:3px">최근 실적 OEE</div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:${solo?'12px':'8px'};text-align:center">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:${solo?'28px':'20px'};font-weight:700;color:var(--warn);line-height:1">${oeeSum}</div>
+          <div style="font-size:${solo?'12px':'10px'};color:var(--muted);margin-top:3px">최근 실적 OEE</div>
         </div>
       </div>
       <div class="line-status-btns">

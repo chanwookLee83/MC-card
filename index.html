@@ -46,7 +46,7 @@
 [data-theme="light"] {
   --bg:#f0f4f8; --bg2:#e2e8f0; --bg3:#d0dce8; --border:#b8ccdc;
   --accent:#0088bb; --accent2:#d94f1e; --accent3:#2a8a2a;
-  --warn:#b37800; --danger:#c0213a;
+  --warn:#8a6200; --danger:#c0213a;
   --text:#1a2640; --muted:#4a6070; --card:#ffffff;
   --header-bg:rgba(240,244,248,0.95);
   --bnav-bg:rgba(240,244,248,0.96);
@@ -209,14 +209,54 @@ optgroup{color:var(--muted);font-style:normal}
 
 /* BOTTOM NAV */
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bnav-bg);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:8px 0 env(safe-area-inset-bottom,8px);z-index:100}
-.bottom-nav-inner{display:flex;justify-content:space-around}
-.bnav-btn{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;cursor:pointer;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:11px;padding:4px 8px;transition:color .2s}
+.bottom-nav-inner{display:flex;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;padding:0 4px}
+.bottom-nav-inner::-webkit-scrollbar{display:none}
+.bnav-btn{flex-shrink:0;min-width:58px;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;cursor:pointer;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:11px;padding:4px 6px;transition:color .2s}
 .bnav-icon{font-size:22px;line-height:1}
 .bnav-btn.active{color:var(--accent)}
+
+/* LINE STATUS */
+.line-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;transition:border-color .3s}
+.line-status-banner{padding:10px 14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.line-card-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.line-status-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.line-status-btn{padding:7px 2px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:11px;font-weight:700;transition:all .2s;color:var(--muted);white-space:nowrap}
+.line-status-btn:hover{opacity:0.85}
+.lsb-running.on{background:rgba(0,200,81,0.15);border-color:#00c851;color:#00c851}
+.lsb-stopped.on{background:rgba(255,64,96,0.15);border-color:#ff4060;color:#ff4060}
+.lsb-idle.on{background:rgba(107,127,163,0.15);border-color:#6b7fa3;color:#6b7fa3}
+.lsb-waiting.on{background:rgba(255,204,0,0.15);border-color:#ffcc00;color:#ffcc00}
+[data-theme="light"] .lsb-waiting.on{background:rgba(180,130,0,0.12);border-color:#b38200;color:#7a5800}
+[data-theme="light"] [data-status="waiting"]{color:#7a5800 !important;border-color:#b38200 !important}
+[data-theme="light"] .line-status-banner[data-status="waiting"]{color:#7a5800 !important;background:rgba(180,130,0,0.12) !important;border-bottom-color:#b38200 !important}
+.line-worker-input{background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:13px;padding:7px 10px;width:100%;outline:none;transition:border-color .2s}
+.line-worker-input:focus{border-color:var(--accent)}
+.worker-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);border-radius:20px;padding:3px 8px 3px 10px;font-size:12px;font-weight:600;color:var(--accent)}
+.worker-chip-del{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;line-height:1;padding:0;display:flex;align-items:center;transition:color .15s}
+.worker-chip-del:hover{color:var(--danger)}
+.worker-add-btn{background:none;border:1px dashed var(--border);border-radius:20px;color:var(--muted);font-size:12px;font-weight:700;padding:3px 10px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.worker-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+.worker-add-row{display:flex;gap:5px;margin-top:5px}
+.worker-add-input{flex:1;background:var(--bg2);border:1px solid var(--accent);border-radius:8px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:13px;padding:5px 9px;outline:none;min-width:0}
+.worker-add-confirm{background:var(--accent);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.line-part-chip{background:rgba(0,212,255,0.1);color:var(--accent);border-radius:10px;padding:1px 7px;font-size:10px;font-family:'JetBrains Mono',monospace}
 
 /* PAGES */
 .page{display:none}
 .page.active{display:block}
+
+/* AUTO SLIDE */
+.slide-ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px}
+.slide-toggle-btn{background:var(--bg3);border:1px solid var(--border);border-radius:20px;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;padding:5px 14px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.slide-toggle-btn.on{background:rgba(0,212,255,0.15);border-color:var(--accent);color:var(--accent)}
+.slide-interval-select{background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:4px 8px;outline:none;cursor:pointer}
+.slide-progress-wrap{flex:1;min-width:80px;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.slide-progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#0099cc);border-radius:3px;transition:width linear}
+.slide-page-dots{display:flex;gap:5px;align-items:center;flex-shrink:0}
+.slide-dot{width:8px;height:8px;border-radius:50%;background:var(--border);cursor:pointer;transition:all .2s;border:none;padding:0}
+.slide-dot.active{background:var(--accent);box-shadow:0 0 6px var(--accent);width:20px;border-radius:4px}
+#lineStatusGrid{transition:opacity .3s}
+#lineStatusGrid.fading{opacity:0}
 
 /* MISC */
 .divider{height:1px;background:var(--border);margin:14px 0}
@@ -269,20 +309,65 @@ optgroup{color:var(--muted);font-style:normal}
 
 <!-- ══ PC 탭 ══ -->
 <nav class="nav-tabs">
-  <button class="tab-btn active" onclick="showPage('dashboard',this)"><span class="tab-emoji">📊</span> 대시보드</button>
+  <button class="tab-btn active" onclick="showPage('lines',this)"><span class="tab-emoji">🏭</span> 가동현황</button>
+  <button class="tab-btn" onclick="showPage('dashboard',this)"><span class="tab-emoji">📊</span> 대시보드</button>
   <button class="tab-btn" onclick="showPage('input',this)"><span class="tab-emoji">✏️</span> 실적입력</button>
   <button class="tab-btn" onclick="showPage('history',this)"><span class="tab-emoji">📋</span> 이력조회</button>
   <button class="tab-btn" onclick="showPage('products',this)"><span class="tab-emoji">🏷️</span> 품번관리</button>
   <button class="tab-btn" onclick="showPage('codes',this)"><span class="tab-emoji">🔢</span> 코드관리</button>
+  <button class="tab-btn" onclick="showPage('line-mgmt',this)"><span class="tab-emoji">🔧</span> 라인관리</button>
   <button class="tab-btn" onclick="showPage('analysis',this)"><span class="tab-emoji">📈</span> 분석</button>
 </nav>
 
 <main>
 
 <!-- ══════════════════════════════════════
+     PAGE 0 : 라인 가동현황
+══════════════════════════════════════ -->
+<div class="page active" id="page-lines">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <div class="section-title" style="margin-bottom:0">🏭 라인 가동현황</div>
+    <div style="font-size:11px;color:var(--muted)">갱신: <span id="lineStatusUpdated">-</span></div>
+  </div>
+  <!-- 자동 전환 컨트롤 -->
+  <div class="slide-ctrl">
+    <button class="slide-toggle-btn" id="slideToggleBtn" onclick="toggleSlide()">▶ 자동 전환</button>
+    <select class="slide-interval-select" id="slideIntervalSelect" onchange="setSlideInterval(+this.value)">
+      <option value="5">5초</option>
+      <option value="10" selected>10초</option>
+      <option value="15">15초</option>
+      <option value="30">30초</option>
+      <option value="60">60초</option>
+    </select>
+    <span style="font-size:11px;color:var(--muted)" id="slidePageLabel"></span>
+    <div class="slide-progress-wrap"><div class="slide-progress-fill" id="slideProgressFill"></div></div>
+    <div class="slide-page-dots" id="slidePageDots"></div>
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="lineStatusSummary"></div>
+  <div id="lineStatusGrid"></div>
+  <div id="lineStatusEmpty" style="display:none;text-align:center;padding:48px 20px;color:var(--muted)">
+    <div style="font-size:48px;margin-bottom:10px">🏭</div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px">등록된 라인이 없습니다</div>
+    <div style="font-size:13px">라인 관리 탭에서 라인을 추가하세요</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 0-B : 라인 관리
+══════════════════════════════════════ -->
+<div class="page" id="page-line-mgmt">
+  <div class="section-title">🔧 라인 관리</div>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+    <button class="btn btn-primary" onclick="openLineModal()" style="flex:1;padding:12px;background:linear-gradient(135deg,var(--accent3),#44cc44);color:#000;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">➕ 라인 추가</button>
+    <button class="btn btn-sm" id="lineMgmtCollapseBtn" onclick="toggleLineMgmtList()" style="padding:10px 14px;white-space:nowrap;font-size:13px">▲ 접기</button>
+  </div>
+  <div id="lineMgmtList"></div>
+</div>
+
+<!-- ══════════════════════════════════════
      PAGE 1 : 대시보드
 ══════════════════════════════════════ -->
-<div class="page active" id="page-dashboard">
+<div class="page" id="page-dashboard">
 
   <div class="section-title">📊 OEE 현황</div>
 
@@ -736,6 +821,32 @@ optgroup{color:var(--muted);font-style:normal}
   </div>
 </div>
 
+<!-- 라인 등록/수정 모달 -->
+<div class="modal-overlay" id="lineModal" style="display:none;align-items:flex-start;overflow-y:auto">
+  <div class="modal-box" style="border:1px solid var(--accent3);box-shadow:0 0 40px rgba(2,180,32,0.15);margin:auto;max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--accent3)" id="lineModalTitle">🏭 라인 추가</div>
+      <button class="modal-close" onclick="closeLineModal()">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="field-wrap">
+        <div class="field-label">🏭 라인명</div>
+        <input type="text" class="field-input" id="lineModalName" placeholder="예) 1호 라인, 조립 A라인">
+      </div>
+      <div class="field-wrap">
+        <div class="field-label" style="margin-bottom:6px">🏷️ 담당 품번 <span style="font-size:11px;color:var(--muted);font-weight:400">(복수 선택 가능)</span></div>
+        <div id="lineModalPartNos" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-height:44px"></div>
+        <div id="lineModalNoProducts" style="display:none;font-size:12px;color:var(--muted);padding:4px 0">먼저 품번 관리에서 품번을 추가하세요</div>
+      </div>
+    </div>
+    <input type="hidden" id="lineModalIdx" value="-1">
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn" onclick="saveLineModal()" style="flex:1;padding:13px;border-radius:10px;font-size:14px;font-weight:700;background:linear-gradient(135deg,var(--accent3),#44cc44);color:#000;box-shadow:0 4px 16px rgba(127,255,107,0.25)">💾 저장</button>
+      <button class="btn btn-sm" onclick="closeLineModal()" style="flex:0.4;border-radius:10px">취소</button>
+    </div>
+  </div>
+</div>
+
 <!-- 삭제 확인 모달 (공용) -->
 <div class="modal-overlay" id="deleteModal">
   <div class="delete-modal-box" style="border:1px solid var(--danger);box-shadow:0 0 40px rgba(255,64,96,0.2)">
@@ -798,11 +909,13 @@ optgroup{color:var(--muted);font-style:normal}
 <!-- 바텀 네비 -->
 <nav class="bottom-nav">
   <div class="bottom-nav-inner">
-    <button class="bnav-btn active" onclick="showPage('dashboard',null,'dashboard')"><span class="bnav-icon">📊</span>대시보드</button>
+    <button class="bnav-btn active" onclick="showPage('lines',null,'lines')"><span class="bnav-icon">🏭</span>가동현황</button>
+    <button class="bnav-btn" onclick="showPage('dashboard',null,'dashboard')"><span class="bnav-icon">📊</span>대시보드</button>
     <button class="bnav-btn" onclick="showPage('input',null,'input')"><span class="bnav-icon">✏️</span>실적입력</button>
     <button class="bnav-btn" onclick="showPage('history',null,'history')"><span class="bnav-icon">📋</span>이력</button>
     <button class="bnav-btn" onclick="showPage('products',null,'products')"><span class="bnav-icon">🏷️</span>품번</button>
     <button class="bnav-btn" onclick="showPage('codes',null,'codes')"><span class="bnav-icon">🔢</span>코드</button>
+    <button class="bnav-btn" onclick="showPage('line-mgmt',null,'line-mgmt')"><span class="bnav-icon">🔧</span>라인관리</button>
     <button class="bnav-btn" onclick="showPage('analysis',null,'analysis')"><span class="bnav-icon">📈</span>분석</button>
   </div>
 </nav>
@@ -863,6 +976,15 @@ let LOSS_CODES = [
 
 const TOTAL_MIN = 720;
 
+let LINES = [];
+
+const LINE_STATUS_CFG = {
+  running: { label:'가동중',   color:'#00c851', bg:'rgba(0,200,81,0.13)',    border:'#00c851', icon:'🟢' },
+  stopped: { label:'종료',     color:'#ff4060', bg:'rgba(255,64,96,0.13)',   border:'#ff4060', icon:'🔴' },
+  idle:    { label:'비가동',   color:'#6b7fa3', bg:'rgba(107,127,163,0.13)', border:'#6b7fa3', icon:'⚫' },
+  waiting: { label:'수리대기', color:'#ffcc00', bg:'rgba(255,204,0,0.13)',   border:'#ffcc00', icon:'🟡' },
+};
+
 // ══ 이모지 목록 ══
 const PRODUCT_EMOJIS = ['🔩','🔧','🏭','⚙️','🪛','🔨','🛠️','🔗','🧱','📦','🔑','🔬','💡','🎯','🚀'];
 const CODE_EMOJIS    = ['🔴','🟠','🟡','🟢','🔵','🟣','⚫','🍽️','🧹','📋','⚙️','🔧','🔩','⚡','🛑','⏸️','🔄','📦','🚧','⏱️'];
@@ -878,9 +1000,10 @@ function saveData() {
   localStorage.setItem('mc_products',   JSON.stringify(PRODUCTS));
   localStorage.setItem('mc_records',    JSON.stringify(RECORDS));
   localStorage.setItem('mc_loss_codes', JSON.stringify(LOSS_CODES));
+  localStorage.setItem('mc_lines',      JSON.stringify(LINES));
   if (!fbDB) return;
   _lastLocalSave = Date.now();
-  fbDB.ref(FB_REF).set({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES })
+  fbDB.ref(FB_REF).set({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES, lines: LINES })
     .then(() => showToast('✅ 저장됨'))
     .catch(e => { console.warn('[Firebase] 저장 실패:', e); showToast('❌ 저장 실패'); });
 }
@@ -889,9 +1012,11 @@ function _applyLocal() {
   const p = localStorage.getItem('mc_products');
   const r = localStorage.getItem('mc_records');
   const c = localStorage.getItem('mc_loss_codes');
+  const l = localStorage.getItem('mc_lines');
   if (p) PRODUCTS   = JSON.parse(p);
   if (r) RECORDS    = JSON.parse(r);
   if (c) LOSS_CODES = JSON.parse(c);
+  if (l) LINES      = JSON.parse(l);
 }
 
 function loadData(callback) {
@@ -902,6 +1027,7 @@ function loadData(callback) {
       if (Array.isArray(d.products))  PRODUCTS   = d.products;
       if (Array.isArray(d.records))   RECORDS    = d.records;
       if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
+      if (Array.isArray(d.lines))     LINES      = d.lines;
     } else {
       _applyLocal();
       if (PRODUCTS.length || RECORDS.length) saveData();
@@ -923,7 +1049,8 @@ function setupRealtimeSync() {
     if (Array.isArray(d.products))  PRODUCTS   = d.products;
     if (Array.isArray(d.records))   RECORDS    = d.records;
     if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
-    renderDashboard(); renderHistory();
+    if (Array.isArray(d.lines))     LINES      = d.lines;
+    renderDashboard(); renderHistory(); renderLineStatus();
     renderProductList(); renderCodeList(); renderCodeTable();
     syncProductSelect();
     if (_syncReady) showToast('🔄 다른 기기에서 동기화됨');
@@ -974,10 +1101,17 @@ function showPage(name, tabEl, bnavId) {
   if (tabEl) tabEl.classList.add('active');
   document.querySelectorAll('.bnav-btn').forEach(b => b.classList.remove('active'));
   if (bnavId) {
-    const idx = ['dashboard','input','history','products','codes','analysis'].indexOf(bnavId);
+    const idx = ['lines','dashboard','input','history','products','codes','line-mgmt','analysis'].indexOf(bnavId);
     document.querySelectorAll('.bnav-btn')[idx]?.classList.add('active');
   }
-  if (name === 'analysis') renderAnalysis();
+  if (name === 'analysis')  renderAnalysis();
+  if (name === 'lines') {
+    renderLineStatus();
+    if (_slideActive) startSlideTimer();
+  } else {
+    stopSlideTimer();
+  }
+  if (name === 'line-mgmt') renderLineMgmt();
 }
 
 // ══ 토스트 ══
@@ -1534,6 +1668,7 @@ function saveRecord() {
   resetInputForm();
   renderDashboard();
   renderHistory();
+  renderLineStatus();
 }
 
 function resetInputForm() {
@@ -1755,13 +1890,390 @@ function confirmDelete() {
     saveData();
     showToast(`🗑️ ${removed.code} 삭제됨`);
     closeDeleteModal(); renderCodeList(); renderCodeTable();
-  } else {
+  } else if (deleteMode === 'record') {
     if (recordDeleteIdx === null) return;
     const removed = RECORDS.splice(recordDeleteIdx, 1)[0];
     saveData();
     showToast(`🗑️ ${removed.date} ${shiftLabel(removed.shift)} 실적 삭제됨`);
     closeDeleteModal(); renderDashboard(); renderHistory();
+  } else if (deleteMode === 'line') {
+    if (deleteTargetIdx === null) return;
+    const removed = LINES.splice(deleteTargetIdx, 1)[0];
+    saveData();
+    showToast(`🗑️ ${removed.name} 삭제됨`);
+    closeDeleteModal(); renderLineMgmt(); renderLineStatus();
   }
+}
+
+// ══════════════════════════════
+//  라인 가동현황
+// ══════════════════════════════
+function renderLineStatus() {
+  renderSlicedLineStatus();
+}
+
+// ══ 자동 슬라이드 ══
+let _slideActive   = false;
+let _slidePage     = 0;
+let _slideInterval = 10;
+let _slideTimer    = null;
+let _slideProgress = null;
+let _slideStart    = 0;
+
+function linesPerPage() {
+  return window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 3 : 2;
+}
+
+function slideTotalPages() {
+  return Math.max(1, Math.ceil(LINES.length / linesPerPage()));
+}
+
+function updateSlideDots() {
+  const total = slideTotalPages();
+  const wrap  = document.getElementById('slidePageDots');
+  const label = document.getElementById('slidePageLabel');
+  if (!wrap) return;
+  if (!_slideActive || total <= 1) { wrap.innerHTML = ''; if (label) label.textContent = ''; return; }
+  wrap.innerHTML = Array.from({ length: total }, (_, i) =>
+    `<button class="slide-dot${i === _slidePage ? ' active' : ''}" onclick="goSlidePage(${i})"></button>`
+  ).join('');
+  if (label) label.textContent = `${_slidePage + 1} / ${total}`;
+}
+
+function renderSlicedLineStatus() {
+  const grid  = document.getElementById('lineStatusGrid');
+  const empty = document.getElementById('lineStatusEmpty');
+  const upd   = document.getElementById('lineStatusUpdated');
+  if (upd) upd.textContent = new Date().toLocaleTimeString('ko-KR');
+
+  const summaryEl = document.getElementById('lineStatusSummary');
+  if (summaryEl) {
+    const counts = { running: 0, stopped: 0, idle: 0, waiting: 0 };
+    LINES.forEach(l => { if (counts[l.status] !== undefined) counts[l.status]++; else counts.idle++; });
+    summaryEl.innerHTML = Object.entries(LINE_STATUS_CFG).map(([key, cfg]) =>
+      `<div data-status="${key}" style="display:flex;align-items:center;gap:5px;background:${cfg.bg};border:1px solid ${cfg.border};border-radius:20px;padding:4px 12px">
+        <span style="font-size:14px">${cfg.icon}</span>
+        <span style="font-size:12px;font-weight:700;color:${cfg.color}">${cfg.label}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:${cfg.color}">${counts[key]}</span>
+      </div>`
+    ).join('');
+  }
+
+  if (!LINES.length) {
+    if (grid) grid.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    updateSlideDots();
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  const start = _slidePage * linesPerPage();
+  const slice = _slideActive ? LINES.slice(start, start + linesPerPage()) : LINES;
+  const idxOffset = _slideActive ? start : 0;
+
+  if (grid) grid.innerHTML = slice.map((line, i) => buildLineCard(line, idxOffset + i)).join('');
+  updateSlideDots();
+}
+
+function buildLineCard(line, idx) {
+  const cfg      = LINE_STATUS_CFG[line.status || 'idle'];
+  const lineRecs = [...RECORDS].reverse().filter(r => (line.partNos || []).includes(r.partNo));
+  const lastRec  = lineRecs[0];
+  const chips    = (line.partNos || []).map(no => {
+    const p = PRODUCTS.find(x => x.no === no);
+    return `<span class="line-part-chip" style="font-size:13px;padding:3px 10px">${p ? p.emoji + ' ' : ''}${no}</span>`;
+  }).join('');
+  const calcRecs = lineRecs.slice(0, 1);
+  let oeeSum = '-';
+  if (calcRecs.length) {
+    const avg = calcRecs.reduce((a, r) => a + r.avail * r.perf * r.qual, 0) / calcRecs.length * 100;
+    oeeSum = avg.toFixed(1) + '%';
+  }
+  const recRows = lineRecs.slice(0, 1).map(r => {
+    const oee = (r.avail * r.perf * r.qual * 100).toFixed(1);
+    const dc  = r.defect > 0 ? (r.defect / r.qty * 100 > 3 ? 'var(--danger)' : 'var(--warn)') : 'var(--accent3)';
+    return `<tr>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);white-space:nowrap">${r.date.slice(5)}</td>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);white-space:nowrap">${shiftLabel(r.shift)}</td>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:11px">${r.partNo}</td>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;font-family:'JetBrains Mono',monospace">${r.qty.toLocaleString()}</td>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:${dc}">${r.defect}</td>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right" class="${oeeClass(+oee)}">${oee}%</td>
+    </tr>`;
+  }).join('');
+  const codeMap = {};
+  if (lastRec) (lastRec.lossCodes || []).forEach(lc => { if (lc.min) codeMap[lc.code] = { min: lc.min, note: lc.note || '' }; });
+  const topCodes = Object.entries(codeMap).sort((a, b) => b[1].min - a[1].min).slice(0, 5);
+  const totalLoss = topCodes.reduce((a, [, v]) => a + v.min, 0);
+  const codeRows = topCodes.map(([code, { min, note }]) => {
+    const lc  = LOSS_CODES.find(c => c.code === code) || { name: code, color: '#6b7fa3', emoji: '⚫' };
+    const pct = totalLoss ? Math.round(min / totalLoss * 100) : 0;
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:12px">
+      <span style="color:${lc.color};flex-shrink:0;width:24px;text-align:center">${lc.emoji}</span>
+      <span style="color:var(--text);white-space:nowrap">${lc.name}</span>
+      ${note ? `<span style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">· ${note}</span>` : '<span style="flex:1"></span>'}
+      <div style="width:70px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0">
+        <div style="width:${pct}%;height:100%;background:${lc.color};border-radius:3px"></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace;color:${lc.color};min-width:40px;text-align:right;flex-shrink:0">${min}분</span>
+    </div>`;
+  }).join('');
+  return `
+  <div class="line-card" style="border-color:${cfg.border}">
+    <div class="line-status-banner" data-status="${line.status||'idle'}" style="background:${cfg.bg};color:${cfg.color};border-bottom-color:${cfg.border}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:22px">${cfg.icon}</span>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px">${line.name}</span>
+      </div>
+      <div style="font-size:14px;font-weight:700;letter-spacing:0.5px">${cfg.label}</div>
+    </div>
+    <div class="line-card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start">
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:5px;display:flex;align-items:center;justify-content:space-between">
+            <span>👤 작업자</span>
+            <button class="worker-add-btn" onclick="showWorkerInput(${idx})">+ 추가</button>
+          </div>
+          <div id="workerChips_${idx}" style="display:flex;flex-wrap:wrap;gap:4px;min-height:26px">
+            ${(line.workers||[]).map((w,wi)=>`<span class="worker-chip">${w}<button class="worker-chip-del" onclick="removeWorker(${idx},${wi})">×</button></span>`).join('')}
+            ${!(line.workers||[]).length ? `<span style="font-size:12px;color:var(--muted)">미배정</span>` : ''}
+          </div>
+          <div id="workerInputRow_${idx}" style="display:none" class="worker-add-row">
+            <input class="worker-add-input" id="workerInputField_${idx}" placeholder="작업자명"
+              onkeydown="if(event.key==='Enter')confirmAddWorker(${idx})">
+            <button class="worker-add-confirm" onclick="confirmAddWorker(${idx})">✓</button>
+          </div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:var(--warn);line-height:1">${oeeSum}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">최근 실적 OEE</div>
+        </div>
+      </div>
+      <div class="line-status-btns">
+        <button class="line-status-btn lsb-running ${line.status==='running'?'on':''}"
+          onclick="setLineStatus(${idx},'running')" style="border-color:#00c851">🟢 가동중</button>
+        <button class="line-status-btn lsb-stopped ${line.status==='stopped'?'on':''}"
+          onclick="setLineStatus(${idx},'stopped')" style="border-color:#ff4060">🔴 종료</button>
+        <button class="line-status-btn lsb-idle ${line.status==='idle'||!line.status?'on':''}"
+          onclick="setLineStatus(${idx},'idle')" style="border-color:#6b7fa3">⚫ 비가동</button>
+        <button class="line-status-btn lsb-waiting ${line.status==='waiting'?'on':''}"
+          onclick="setLineStatus(${idx},'waiting')" style="border-color:#ffcc00">🟡 수리대기</button>
+      </div>
+      ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center"><span style="font-size:12px;color:var(--muted);flex-shrink:0">🏷️</span>${chips}</div>` : ''}
+      ${recRows ? `
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:5px;letter-spacing:0.5px">📋 최근 실적</div>
+        <div class="tbl-scroll" style="border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--bg3)">
+              <th style="padding:5px 6px;text-align:left;color:var(--muted);font-weight:700;font-size:10px">날짜</th>
+              <th style="padding:5px 6px;text-align:left;color:var(--muted);font-weight:700;font-size:10px">교대</th>
+              <th style="padding:5px 6px;text-align:left;color:var(--muted);font-weight:700;font-size:10px">품번</th>
+              <th style="padding:5px 6px;text-align:right;color:var(--muted);font-weight:700;font-size:10px">생산</th>
+              <th style="padding:5px 6px;text-align:right;color:var(--muted);font-weight:700;font-size:10px">불량</th>
+              <th style="padding:5px 6px;text-align:right;color:var(--muted);font-weight:700;font-size:10px">OEE</th>
+            </tr></thead>
+            <tbody>${recRows}</tbody>
+          </table>
+        </div>
+      </div>` : ''}
+      ${codeRows ? `
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:6px;letter-spacing:0.5px">📊 손실코드 분석</div>
+        <div style="display:flex;flex-direction:column;gap:5px">${codeRows}</div>
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+
+function goSlidePage(n) {
+  const total = slideTotalPages();
+  _slidePage = ((n % total) + total) % total;
+  _slideStart = performance.now();
+  const fill = document.getElementById('slideProgressFill');
+  if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
+  const grid = document.getElementById('lineStatusGrid');
+  if (grid) { grid.classList.add('fading'); }
+  setTimeout(() => {
+    if (grid) { grid.classList.remove('fading'); }
+    renderSlicedLineStatus();
+    if (fill && _slideActive) {
+      fill.style.transition = `width ${_slideInterval}s linear`;
+      fill.style.width = '100%';
+    }
+  }, 300);
+}
+
+function startSlideTimer() {
+  stopSlideTimer();
+  const fill = document.getElementById('slideProgressFill');
+  if (fill) { fill.style.transition = `width ${_slideInterval}s linear`; fill.style.width = '100%'; }
+  _slideTimer = setInterval(() => {
+    if (slideTotalPages() <= 1) return;
+    goSlidePage(_slidePage + 1);
+  }, _slideInterval * 1000);
+}
+
+function stopSlideTimer() {
+  if (_slideTimer) { clearInterval(_slideTimer); _slideTimer = null; }
+  const fill = document.getElementById('slideProgressFill');
+  if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
+}
+
+function toggleSlide() {
+  _slideActive = !_slideActive;
+  _slidePage   = 0;
+  const btn = document.getElementById('slideToggleBtn');
+  if (btn) { btn.textContent = _slideActive ? '⏹ 전환 중지' : '▶ 자동 전환'; btn.classList.toggle('on', _slideActive); }
+  if (_slideActive) { startSlideTimer(); } else { stopSlideTimer(); }
+  renderSlicedLineStatus();
+}
+
+function setSlideInterval(sec) {
+  _slideInterval = sec;
+  if (_slideActive) startSlideTimer();
+}
+
+function setLineStatus(idx, status) {
+  if (!LINES[idx]) return;
+  LINES[idx].status   = status;
+  LINES[idx].statusAt = new Date().toISOString();
+  saveData();
+  renderSlicedLineStatus();
+}
+
+function showWorkerInput(idx) {
+  const row   = document.getElementById('workerInputRow_' + idx);
+  const field = document.getElementById('workerInputField_' + idx);
+  if (!row) return;
+  row.style.display = 'flex';
+  if (field) { field.value = ''; field.focus(); }
+}
+
+function confirmAddWorker(idx) {
+  const field = document.getElementById('workerInputField_' + idx);
+  if (!field) return;
+  const name = field.value.trim();
+  if (!name) return;
+  if (!LINES[idx]) return;
+  if (!Array.isArray(LINES[idx].workers)) LINES[idx].workers = [];
+  if (LINES[idx].workers.includes(name)) { showToast('⚠️ 이미 등록된 작업자'); return; }
+  LINES[idx].workers.push(name);
+  saveData();
+  renderSlicedLineStatus();
+}
+
+function removeWorker(idx, wi) {
+  if (!LINES[idx] || !Array.isArray(LINES[idx].workers)) return;
+  LINES[idx].workers.splice(wi, 1);
+  saveData();
+  renderSlicedLineStatus();
+}
+
+// ──────────────────────────────
+//  라인 관리 (등록/수정/삭제)
+// ──────────────────────────────
+function renderLineMgmt() {
+  const el = document.getElementById('lineMgmtList');
+  if (!LINES.length) {
+    el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:40px;margin-bottom:8px">📭</div><div>등록된 라인이 없습니다</div></div>`;
+    return;
+  }
+  el.innerHTML = LINES.map((line, i) => {
+    const cfg   = LINE_STATUS_CFG[line.status || 'idle'];
+    const parts = (line.partNos || []).join(' · ') || '담당 품번 없음';
+    return `
+    <div class="product-item" style="border-left:3px solid ${cfg.border}">
+      <div style="font-size:26px;flex-shrink:0">${cfg.icon}</div>
+      <div class="product-info">
+        <div class="product-num">${line.name}</div>
+        <div class="product-ct" style="color:${cfg.color}">${cfg.label}</div>
+        <div class="product-name" style="margin-top:2px;font-size:11px">🏷️ ${parts}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-sm" onclick="openLineModal(${i})" style="color:var(--accent);border-color:var(--accent)">✏️</button>
+        <button class="btn btn-sm" onclick="openLineDeleteModal(${i})" style="color:var(--danger);border-color:var(--danger)">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleLineMgmtList() {
+  const list = document.getElementById('lineMgmtList');
+  const btn  = document.getElementById('lineMgmtCollapseBtn');
+  const open = list.style.display !== 'none';
+  list.style.display = open ? 'none' : '';
+  if (btn) btn.textContent = open ? '▼ 펼치기' : '▲ 접기';
+  localStorage.setItem('mc_linemgmt_collapsed', open ? '1' : '0');
+}
+
+function applyLineMgmtCollapsed() {
+  if (localStorage.getItem('mc_linemgmt_collapsed') === '1') {
+    const list = document.getElementById('lineMgmtList');
+    const btn  = document.getElementById('lineMgmtCollapseBtn');
+    if (list) list.style.display = 'none';
+    if (btn)  btn.textContent = '▼ 펼치기';
+  }
+}
+
+function openLineModal(idx) {
+  const isEdit = idx !== undefined;
+  const line   = isEdit ? LINES[idx] : null;
+  document.getElementById('lineModalIdx').value    = isEdit ? idx : -1;
+  document.getElementById('lineModalTitle').textContent = isEdit ? '🏭 라인 수정' : '🏭 라인 추가';
+  document.getElementById('lineModalName').value   = line ? line.name : '';
+  const wrap = document.getElementById('lineModalPartNos');
+  const noProductsEl = document.getElementById('lineModalNoProducts');
+  if (!PRODUCTS.length) {
+    wrap.innerHTML = '';
+    noProductsEl.style.display = 'block';
+  } else {
+    noProductsEl.style.display = 'none';
+    wrap.innerHTML = PRODUCTS.map(p => {
+      const checked = line ? (line.partNos || []).includes(p.no) : false;
+      return `<label style="display:flex;align-items:center;gap:5px;background:${checked?'rgba(0,212,255,0.12)':'var(--bg3)'};border:1px solid ${checked?'var(--accent)':'var(--border)'};border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;transition:all .2s">
+        <input type="checkbox" value="${p.no}" ${checked?'checked':''} onchange="toggleLinePartChk(this)" style="accent-color:var(--accent)">
+        ${p.emoji} ${p.no} · ${p.name}
+      </label>`;
+    }).join('');
+  }
+  document.getElementById('lineModal').style.display = 'flex';
+}
+
+function toggleLinePartChk(el) {
+  const lbl = el.closest('label');
+  lbl.style.background   = el.checked ? 'rgba(0,212,255,0.12)' : 'var(--bg3)';
+  lbl.style.borderColor  = el.checked ? 'var(--accent)' : 'var(--border)';
+}
+
+function closeLineModal() {
+  document.getElementById('lineModal').style.display = 'none';
+}
+
+function saveLineModal() {
+  const name = document.getElementById('lineModalName').value.trim();
+  if (!name) { showToast('⚠️ 라인명을 입력하세요'); return; }
+  const partNos = [...document.querySelectorAll('#lineModalPartNos input[type=checkbox]:checked')].map(el => el.value);
+  const idx = +document.getElementById('lineModalIdx').value;
+  if (idx >= 0) {
+    LINES[idx] = { ...LINES[idx], name, partNos };
+    showToast('✏️ 라인이 수정되었습니다');
+  } else {
+    LINES.push({ id:'line-'+Date.now(), name, partNos, status:'idle', workers:[], statusAt:null });
+    showToast('➕ 라인이 추가되었습니다');
+  }
+  saveData();
+  closeLineModal();
+  renderLineMgmt();
+  renderLineStatus();
+}
+
+function openLineDeleteModal(idx) {
+  deleteMode = 'line';
+  deleteTargetIdx = idx;
+  document.getElementById('deleteModalTitle').textContent = '🏭 라인 삭제';
+  document.getElementById('deleteTargetName').textContent = LINES[idx].name;
+  document.getElementById('deleteModal').style.display = 'flex';
 }
 
 // ══════════════════════════════
@@ -1836,6 +2348,16 @@ function toggleProductList() {
   const open = list.style.display !== 'none';
   list.style.display = open ? 'none' : '';
   if (btn) btn.textContent = open ? '▼ 펼치기' : '▲ 접기';
+  localStorage.setItem('mc_product_collapsed', open ? '1' : '0');
+}
+
+function applyProductCollapsed() {
+  if (localStorage.getItem('mc_product_collapsed') === '1') {
+    const list = document.getElementById('productList');
+    const btn  = document.getElementById('productCollapseBtn');
+    if (list) list.style.display = 'none';
+    if (btn)  btn.textContent = '▼ 펼치기';
+  }
 }
 
 function renderProductList() {
@@ -1998,6 +2520,16 @@ function toggleCodeList() {
   const open = list.style.display !== 'none';
   list.style.display = open ? 'none' : '';
   if (btn) btn.textContent = open ? '▼ 펼치기' : '▲ 접기';
+  localStorage.setItem('mc_code_collapsed', open ? '1' : '0');
+}
+
+function applyCodeCollapsed() {
+  if (localStorage.getItem('mc_code_collapsed') === '1') {
+    const list = document.getElementById('codeList');
+    const btn  = document.getElementById('codeCollapseBtn');
+    if (list) list.style.display = 'none';
+    if (btn)  btn.textContent = '▼ 펼치기';
+  }
 }
 
 function renderCodeList() {
@@ -2186,12 +2718,23 @@ document.addEventListener('DOMContentLoaded', () => {
   applyTheme(localStorage.getItem('mc_theme') || 'dark');
   initHeader();
   loadData(() => {
+    // worker(string) → workers(array) 마이그레이션
+    LINES.forEach(l => {
+      if (!Array.isArray(l.workers)) {
+        l.workers = l.worker ? [l.worker] : [];
+        delete l.worker;
+      }
+    });
     renderCodeTable();
     renderCodeList();
     renderProductList();
     syncProductSelect();
     renderDashboard();
     renderHistory();
+    renderLineStatus();
+    applyProductCollapsed();
+    applyCodeCollapsed();
+    applyLineMgmtCollapsed();
   });
 });
 

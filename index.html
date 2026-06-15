@@ -2121,13 +2121,13 @@ function renderSlicedLineStatus() {
   }
   if (empty) empty.style.display = 'none';
 
+  const sorted = getSortedLinesForSlide();
   if (_slideActive) {
-    const sorted = getSortedLinesForSlide();
     _slidePage = Math.min(_slidePage, sorted.length - 1);
     const { line, idx } = sorted[_slidePage];
     if (grid) grid.innerHTML = buildLineCard(line, idx, true);
   } else {
-    if (grid) grid.innerHTML = LINES.map((line, i) => buildLineCard(line, i, false)).join('');
+    if (grid) grid.innerHTML = sorted.map(({ line, idx }) => buildLineCard(line, idx, false)).join('');
   }
   updateSlideDots();
 }

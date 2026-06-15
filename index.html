@@ -1071,9 +1071,10 @@ function saveData() {
   localStorage.setItem('mc_records',    JSON.stringify(RECORDS));
   localStorage.setItem('mc_loss_codes', JSON.stringify(LOSS_CODES));
   localStorage.setItem('mc_lines',      JSON.stringify(LINES));
+  localStorage.setItem('mc_drafts',     JSON.stringify(DRAFTS));
   if (!fbDB) return;
   _lastLocalSave = Date.now();
-  fbDB.ref(FB_REF).set({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES, lines: LINES })
+  fbDB.ref(FB_REF).set({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES, lines: LINES, drafts: DRAFTS })
     .then(() => showToast('✅ 저장됨'))
     .catch(e => { console.warn('[Firebase] 저장 실패:', e); showToast('❌ 저장 실패'); });
 }
@@ -1083,10 +1084,12 @@ function _applyLocal() {
   const r = localStorage.getItem('mc_records');
   const c = localStorage.getItem('mc_loss_codes');
   const l = localStorage.getItem('mc_lines');
-  if (p) PRODUCTS   = JSON.parse(p);
-  if (r) RECORDS    = JSON.parse(r);
-  if (c) LOSS_CODES = JSON.parse(c);
-  if (l) LINES      = JSON.parse(l);
+  const dr = localStorage.getItem('mc_drafts');
+  if (p)  PRODUCTS   = JSON.parse(p);
+  if (r)  RECORDS    = JSON.parse(r);
+  if (c)  LOSS_CODES = JSON.parse(c);
+  if (l)  LINES      = JSON.parse(l);
+  if (dr) DRAFTS     = JSON.parse(dr);
 }
 
 function loadData(callback) {
@@ -1098,6 +1101,7 @@ function loadData(callback) {
       if (Array.isArray(d.records))   RECORDS    = d.records;
       if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
       if (Array.isArray(d.lines))     LINES      = d.lines;
+      if (Array.isArray(d.drafts))    DRAFTS     = d.drafts;
       if (d.slideState) {
         _slideActive   = !!d.slideState.active;
         _slideInterval = d.slideState.interval || 10;
@@ -1125,8 +1129,10 @@ function setupRealtimeSync() {
     if (Array.isArray(d.records))   RECORDS    = d.records;
     if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
     if (Array.isArray(d.lines))     LINES      = d.lines;
+    if (Array.isArray(d.drafts))    DRAFTS     = d.drafts;
     renderDashboard(); renderHistory(); renderLineStatus();
     renderProductList(); renderCodeList(); renderCodeTable();
+    renderDraftList();
     syncProductSelect();
     if (_syncReady) showToast('🔄 다른 기기에서 동기화됨');
     _syncReady = true;

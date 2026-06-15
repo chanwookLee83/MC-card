@@ -1029,11 +1029,16 @@ function loadData(callback) {
       if (Array.isArray(d.records))   RECORDS    = d.records;
       if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
       if (Array.isArray(d.lines))     LINES      = d.lines;
+      if (d.slideState) {
+        _slideActive   = !!d.slideState.active;
+        _slideInterval = d.slideState.interval || 10;
+      }
     } else {
       _applyLocal();
       if (PRODUCTS.length || RECORDS.length) saveData();
     }
     callback();
+    _applySlideStateUI();
     setupRealtimeSync();
   }).catch(() => {
     _applyLocal();
@@ -1057,6 +1062,42 @@ function setupRealtimeSync() {
     if (_syncReady) showToast('🔄 다른 기기에서 동기화됨');
     _syncReady = true;
   });
+  fbDB.ref(FB_REF + '/slideState').on('value', snap => {
+    if (Date.now() - _lastSlideSave < 2000) return;
+    if (!_syncReady) return;
+    const ss = snap.val();
+    if (!ss) return;
+    let changed = false;
+    if (ss.active !== _slideActive) {
+      _slideActive = ss.active;
+      const btn = document.getElementById('slideToggleBtn');
+      if (btn) { btn.textContent = _slideActive ? '⏹ 전환 중지' : '▶ 자동 전환'; btn.classList.toggle('on', _slideActive); }
+      if (_slideActive) { startSlideTimer(); } else { stopSlideTimer(); }
+      changed = true;
+    }
+    if (ss.interval && ss.interval !== _slideInterval) {
+      _slideInterval = ss.interval;
+      const sel = document.getElementById('slideIntervalSelect');
+      if (sel) sel.value = _slideInterval;
+      if (_slideActive) startSlideTimer();
+      changed = true;
+    }
+    if (changed) { renderSlicedLineStatus(); showToast('🔄 자동전환 동기화됨'); }
+  });
+}
+
+function saveSlideState() {
+  if (!fbDB) return;
+  _lastSlideSave = Date.now();
+  fbDB.ref(FB_REF + '/slideState').set({ active: _slideActive, interval: _slideInterval });
+}
+
+function _applySlideStateUI() {
+  const btn = document.getElementById('slideToggleBtn');
+  const sel = document.getElementById('slideIntervalSelect');
+  if (btn) { btn.textContent = _slideActive ? '⏹ 전환 중지' : '▶ 자동 전환'; btn.classList.toggle('on', _slideActive); }
+  if (sel) sel.value = _slideInterval;
+  if (_slideActive) startSlideTimer();
 }
 
 function oeeClass(v) {
@@ -1920,6 +1961,7 @@ let _slideInterval = 10;
 let _slideTimer    = null;
 let _slideProgress = null;
 let _slideStart    = 0;
+let _lastSlideSave = 0;
 
 const SLIDE_STATUS_ORDER = { running: 0, stopped: 1, idle: 2, waiting: 3 };
 
@@ -1943,15 +1985,26 @@ function slideTotalPages() {
 }
 
 function updateSlideDots() {
-  const total = slideTotalPages();
-  const wrap  = document.getElementById('slidePageDots');
-  const label = document.getElementById('slidePageLabel');
+  const total  = slideTotalPages();
+  const wrap   = document.getElementById('slidePageDots');
+  const label  = document.getElementById('slidePageLabel');
   if (!wrap) return;
   if (!_slideActive || total <= 1) { wrap.innerHTML = ''; if (label) label.textContent = ''; return; }
-  wrap.innerHTML = Array.from({ length: total }, (_, i) =>
-    `<button class="slide-dot${i === _slidePage ? ' active' : ''}" onclick="goSlidePage(${i})"></button>`
-  ).join('');
-  if (label) label.textContent = `${_slidePage + 1} / ${total}`;
+  const sorted = getSortedLinesForSlide();
+  wrap.innerHTML = sorted.map((item, i) => {
+    const cfg    = LINE_STATUS_CFG[item.line.status || 'idle'];
+    const active = i === _slidePage;
+    return `<button onclick="goSlidePage(${i})" class="slide-dot${active ? ' active' : ''}"
+      style="${active
+        ? `background:${cfg.color};box-shadow:0 0 6px ${cfg.color};width:20px;border-radius:4px`
+        : `background:${cfg.color}55;border:1px solid ${cfg.color}`
+      }"></button>`;
+  }).join('');
+  const cur = sorted[_slidePage];
+  if (cur && label) {
+    const cfg = LINE_STATUS_CFG[cur.line.status || 'idle'];
+    label.textContent = `${cfg.icon} ${cur.line.name}  (${_slidePage + 1}/${total})`;
+  }
 }
 
 function renderSlicedLineStatus() {
@@ -2144,11 +2197,13 @@ function toggleSlide() {
   if (btn) { btn.textContent = _slideActive ? '⏹ 전환 중지' : '▶ 자동 전환'; btn.classList.toggle('on', _slideActive); }
   if (_slideActive) { startSlideTimer(); } else { stopSlideTimer(); }
   renderSlicedLineStatus();
+  saveSlideState();
 }
 
 function setSlideInterval(sec) {
   _slideInterval = sec;
   if (_slideActive) startSlideTimer();
+  saveSlideState();
 }
 
 function setLineStatus(idx, status) {

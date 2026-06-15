@@ -259,6 +259,23 @@ optgroup{color:var(--muted);font-style:normal}
 #lineStatusGrid{transition:opacity .3s}
 #lineStatusGrid.fading{opacity:0}
 
+/* ANALYSIS DRILLDOWN */
+.drill-panel{background:var(--card);border:1px solid var(--accent);border-radius:var(--radius-lg);padding:16px;margin-top:14px;animation:drill-in .2s ease}
+@keyframes drill-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.drill-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.drill-title{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)}
+.drill-close{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;font-weight:700;padding:4px 10px;cursor:pointer;transition:all .15s}
+.drill-close:hover{border-color:var(--danger);color:var(--danger)}
+.drill-metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+@media(min-width:600px){.drill-metrics{grid-template-columns:repeat(5,1fr)}}
+.drill-metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center}
+.drill-metric-val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;line-height:1}
+.drill-metric-lbl{font-size:10px;color:var(--muted);margin-top:3px;letter-spacing:0.5px}
+.drill-metric-delta{font-size:11px;font-weight:700;margin-top:4px}
+.drill-code-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.drill-code-row:last-child{border-bottom:none}
+.drill-badge{border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;white-space:nowrap}
+
 /* MISC */
 .divider{height:1px;background:var(--border);margin:14px 0}
 ::-webkit-scrollbar{width:4px}
@@ -886,13 +903,14 @@ optgroup{color:var(--muted);font-style:normal}
   </div>
 
   <!-- 분석 테이블 -->
-  <div class="section-title" style="font-size:16px" id="analysisTableTitle">상세 데이터</div>
+  <div class="section-title" style="font-size:16px" id="analysisTableTitle">상세 데이터 <span style="font-size:11px;font-weight:400;color:var(--muted);letter-spacing:0;font-family:'Noto Sans KR',sans-serif">행 클릭 시 상세 분석</span></div>
   <div class="tbl-scroll">
     <table class="hist-table">
       <thead id="analysisTableHead"></thead>
       <tbody id="analysisTableBody"></tbody>
     </table>
   </div>
+  <div id="analysisDrilldown" style="display:none"></div>
 </div>
 
 <!-- 시간 경고 모달 -->
@@ -2746,7 +2764,7 @@ function renderAnalysis() {
     const g = calcGroup(grouped[k]);
     const label = isProduct ? ((PRODUCTS.find(p=>p.no===k)?.emoji||'')+ ' '+k) : k;
     const oc = g.oee>=85?'badge-ok':g.oee>=70?'badge-warn':'badge-bad';
-    return `<tr class="hist-row">
+    return `<tr class="hist-row" data-key="${k}" onclick="showAnalysisDrilldown('${k}')" style="cursor:pointer">
       <td style="font-family:'JetBrains Mono',monospace;font-size:12px;white-space:nowrap">${label}</td>
       <td>${g.count}</td>
       <td>${g.qty.toLocaleString()}</td>
@@ -2757,6 +2775,147 @@ function renderAnalysis() {
       <td class="${oc}">${g.oee.toFixed(1)}%</td>
     </tr>`;
   }).join('');
+
+  // 선택 유지
+  if (_selectedAnalysisKey && grouped[_selectedAnalysisKey]) {
+    showAnalysisDrilldown(_selectedAnalysisKey, true);
+  } else {
+    _selectedAnalysisKey = null;
+    document.getElementById('analysisDrilldown').style.display = 'none';
+  }
+}
+
+// ── 분석 드릴다운 ──
+let _selectedAnalysisKey = null;
+
+function getPrevKey(key, period) {
+  if (period === 'week') {
+    const [y, wStr] = key.split('-W');
+    const year = +y, week = +wStr;
+    if (week > 1) return `${year}-W${String(week-1).padStart(2,'0')}`;
+    const prevYear = year - 1;
+    const lastWk = getWeekKey(`${prevYear}-12-28`).split('-W')[1];
+    return `${prevYear}-W${lastWk}`;
+  }
+  if (period === 'month') {
+    const [y, m] = key.split('-').map(Number);
+    return m > 1 ? `${y}-${String(m-1).padStart(2,'0')}` : `${y-1}-12`;
+  }
+  if (period === 'year') return String(+key - 1);
+  return null;
+}
+
+function calcLossCodeMap(recs) {
+  const map = {};
+  recs.forEach(r => (r.lossCodes || []).forEach(lc => {
+    if (!lc.min) return;
+    if (!map[lc.code]) map[lc.code] = { min: 0, notes: [] };
+    map[lc.code].min += lc.min;
+    const n = (lc.note || '').trim();
+    if (n && !map[lc.code].notes.includes(n)) map[lc.code].notes.push(n);
+  }));
+  return map;
+}
+
+function showAnalysisDrilldown(key, keepOpen) {
+  const panel = document.getElementById('analysisDrilldown');
+  if (!keepOpen && _selectedAnalysisKey === key) {
+    _selectedAnalysisKey = null;
+    panel.style.display = 'none';
+    document.querySelectorAll('#analysisTableBody tr').forEach(r => r.classList.remove('hist-selected'));
+    return;
+  }
+  _selectedAnalysisKey = key;
+  document.querySelectorAll('#analysisTableBody tr').forEach(r =>
+    r.classList.toggle('hist-selected', r.dataset.key === key));
+
+  const grouped = groupRecords(analysisPeriod);
+  const currRecs = grouped[key] || [];
+  const prevKey  = getPrevKey(key, analysisPeriod);
+  const prevRecs = prevKey ? (grouped[prevKey] || []) : [];
+  const hasPrev  = prevRecs.length > 0;
+
+  const curr = calcGroup(currRecs);
+  const prev = hasPrev ? calcGroup(prevRecs) : null;
+  const currDR = curr.qty > 0 ? curr.defect / curr.qty * 100 : 0;
+  const prevDR = prev && prev.qty > 0 ? prev.defect / prev.qty * 100 : null;
+
+  function metricDelta(cur, pre, higherIsBetter, unit='%p') {
+    if (pre === null || pre === undefined) return `<div class="drill-metric-delta" style="color:var(--muted)">—</div>`;
+    const d = cur - pre;
+    const isGood = higherIsBetter ? d >= 0 : d <= 0;
+    const col = Math.abs(d) < 0.05 ? 'var(--muted)' : isGood ? 'var(--accent3)' : 'var(--danger)';
+    const arrow = d > 0.05 ? '▲' : d < -0.05 ? '▼' : '▶';
+    return `<div class="drill-metric-delta" style="color:${col}">${arrow} ${d>0?'+':''}${d.toFixed(1)}${unit}</div>`;
+  }
+
+  const metrics = [
+    { lbl:'🏆 OEE',   val:curr.oee,   prev:prev?.oee,   good:true  },
+    { lbl:'⏱️ 가용률', val:curr.avail, prev:prev?.avail, good:true  },
+    { lbl:'⚡ 성능률', val:curr.perf,  prev:prev?.perf,  good:true  },
+    { lbl:'✅ 품질률', val:curr.qual,  prev:prev?.qual,  good:true  },
+    { lbl:'❌ 불량률', val:currDR,     prev:prevDR,      good:false },
+  ];
+
+  const metricsHtml = metrics.map(m => {
+    const col = m.lbl.includes('OEE') ? (m.val>=85?'var(--accent3)':m.val>=70?'var(--warn)':'var(--danger)') : 'var(--text)';
+    return `<div class="drill-metric">
+      <div class="drill-metric-lbl">${m.lbl}</div>
+      <div class="drill-metric-val" style="color:${col}">${m.val.toFixed(1)}%</div>
+      ${metricDelta(m.val, m.prev, m.good)}
+    </div>`;
+  }).join('');
+
+  // 손실코드 비교
+  const currCodes = calcLossCodeMap(currRecs);
+  const prevCodes = calcLossCodeMap(prevRecs);
+  const allCodes  = new Set([...Object.keys(currCodes), ...Object.keys(prevCodes)]);
+
+  const codeItems = [...allCodes].map(code => {
+    const curObj = currCodes[code] || { min: 0, notes: [] };
+    const preObj = prevCodes[code] || { min: 0, notes: [] };
+    const lc  = LOSS_CODES.find(c => c.code === code) || { name: code, color:'#6b7fa3', emoji:'⚫' };
+    return { code, cur: curObj.min, pre: preObj.min, notes: curObj.notes, diff: curObj.min - preObj.min, lc };
+  }).sort((a, b) => b.cur - a.cur);
+
+  const codeHtml = codeItems.length ? codeItems.map(({ cur, pre, diff, notes, lc }) => {
+    let badge = '';
+    if (!pre && cur)      badge = `<span class="drill-badge" style="background:rgba(0,212,255,0.15);color:var(--accent)">NEW</span>`;
+    else if (pre && !cur) badge = `<span class="drill-badge" style="background:rgba(0,200,81,0.15);color:var(--accent3)">해소</span>`;
+    else if (!hasPrev)    badge = `<span style="color:var(--muted);font-size:11px">—</span>`;
+    else if (diff > 0)    badge = `<span style="color:var(--danger);font-weight:700;font-size:12px">▲ +${diff}분</span>`;
+    else if (diff < 0)    badge = `<span style="color:var(--accent3);font-weight:700;font-size:12px">▼ ${diff}분</span>`;
+    else                  badge = `<span style="color:var(--muted);font-size:12px">▶ 동일</span>`;
+    const noteHtml = notes.length
+      ? `<span style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"> · ${notes.join(' / ')}</span>`
+      : '';
+    return `<div class="drill-code-row">
+      <span style="flex-shrink:0;width:22px;text-align:center">${lc.emoji}</span>
+      <span style="color:var(--text);font-weight:500;white-space:nowrap">${lc.name}</span>
+      ${noteHtml}
+      <span style="font-family:'JetBrains Mono',monospace;color:${lc.color};min-width:44px;text-align:right;flex-shrink:0;margin-left:auto;padding-left:6px">${cur}분</span>
+      <span style="min-width:80px;text-align:right;flex-shrink:0">${badge}</span>
+    </div>`;
+  }).join('') : `<div style="text-align:center;padding:16px;color:var(--muted)">손실코드 데이터 없음</div>`;
+
+  const isProduct = analysisPeriod === 'product';
+  const keyLabel = isProduct ? ((PRODUCTS.find(p=>p.no===key)?.emoji||'')+' '+key) : key;
+  const cmpLabel = hasPrev ? `vs ${prevKey}` : '이전 데이터 없음';
+
+  panel.style.display = 'block';
+  panel.innerHTML = `<div class="drill-panel">
+    <div class="drill-header">
+      <div class="drill-title">🔍 ${keyLabel}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--muted)">${cmpLabel}</span>
+        <button class="drill-close" onclick="showAnalysisDrilldown('${key}')">✕ 닫기</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:8px">📊 지표 비교</div>
+    <div class="drill-metrics">${metricsHtml}</div>
+    <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:6px">🔻 손실코드 분석</div>
+    <div>${codeHtml}</div>
+  </div>`;
 }
 
 // 드롭다운 외부 클릭 닫기

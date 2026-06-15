@@ -273,7 +273,11 @@ optgroup{color:var(--muted);font-style:normal}
 .draft-item:hover{border-color:var(--warn)}
 .draft-item-info{flex:1;min-width:0}
 .draft-item-main{font-size:13px;font-weight:700;color:var(--text)}
-.draft-item-sub{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draft-item-code{font-size:12px;font-weight:700;color:var(--warn);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draft-item-loss{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.draft-lc-tag{font-size:11px;background:rgba(255,100,60,0.12);border:1px solid rgba(255,100,60,0.3);border-radius:6px;padding:2px 7px;color:var(--text);white-space:nowrap}
+.draft-lc-tag b{color:#ff6432}
+.draft-item-sub{font-size:11px;color:var(--muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .draft-del-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;padding:3px 8px;cursor:pointer;flex-shrink:0;transition:all .15s}
 .draft-del-btn:hover{border-color:var(--danger);color:var(--danger)}
 .draft-load-btn{background:rgba(255,204,0,0.15);border:1px solid var(--warn);border-radius:6px;color:var(--warn);font-size:11px;font-weight:700;padding:3px 10px;cursor:pointer;flex-shrink:0;transition:all .15s}
@@ -2802,11 +2806,20 @@ function renderDraftList() {
   if (!el) return;
   el.innerHTML = [...DRAFTS].reverse().map(d => {
     const time = new Date(d.savedAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-    const sub  = [d.partNo && `🏷️ ${d.partNo}`, d.memo && `📝 ${d.memo.slice(0,30)}`].filter(Boolean).join(' ');
+    const partLabel = d.partNo ? `🏷️ ${d.partNo}${d.productName ? ' '+d.productName : ''}` : '품번없음';
+    const sub  = [d.memo && `📝 ${d.memo.slice(0,30)}`].filter(Boolean).join(' ');
+    const lossHtml = (d.lossCodes||[]).length
+      ? (d.lossCodes).map(lc => {
+          const name = (LOSS_CODES.find(c=>c.code===lc.code)||{}).name || lc.code;
+          return `<span class="draft-lc-tag">${lc.code} ${name} <b>${lc.min}분</b>${lc.note ? ' · '+lc.note : ''}</span>`;
+        }).join('')
+      : '';
     return `<div class="draft-item" onclick="loadDraft('${d.id}')">
       <div class="draft-item-info">
-        <div class="draft-item-main">${d.date||'날짜없음'} · ${shiftLabel(d.shift)} · ${d.qty||'-'}개</div>
-        <div class="draft-item-sub">${sub || '내용 없음'} · ${time}</div>
+        <div class="draft-item-main">${d.date||'날짜없음'} · ${shiftLabel(d.shift)} · ${d.qty > 0 ? d.qty+'개' : '수량미입력'}</div>
+        <div class="draft-item-code">${partLabel}</div>
+        ${lossHtml ? `<div class="draft-item-loss">${lossHtml}</div>` : ''}
+        <div class="draft-item-sub">${sub ? sub+' · ' : ''}${time}</div>
       </div>
       <button class="draft-load-btn" onclick="loadDraft('${d.id}');event.stopPropagation()">불러오기</button>
       <button class="draft-del-btn" onclick="deleteDraft('${d.id}',event)">삭제</button>

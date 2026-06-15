@@ -559,7 +559,7 @@ optgroup{color:var(--muted);font-style:normal}
   <!-- 기본정보 -->
   <div class="form-card">
     <div style="font-size:14px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:12px">📋 기본 정보</div>
-    <div class="form-row three">
+    <div class="form-row three" style="margin-bottom:10px">
       <div class="field-wrap">
         <div class="field-label" style="justify-content:space-between">
           <span><span class="lbl-emoji">📅</span> 날짜</span>
@@ -586,36 +586,40 @@ optgroup{color:var(--muted);font-style:normal}
       </div>
       <div class="field-wrap">
         <div class="field-label"><span class="lbl-emoji">👤</span> 입력자</div>
-        <input type="text" class="field-input" id="inputBy" placeholder="이름 입력">
+        <div style="display:flex;gap:6px;align-items:stretch">
+          <input type="text" class="field-input" id="inputBy" placeholder="이름 입력" style="flex:1;min-width:0">
+          <button class="btn-reset-form" onclick="confirmResetForm()" style="height:44px;white-space:nowrap;flex-shrink:0">🔄 초기화</button>
+        </div>
       </div>
     </div>
-    <div class="form-row full">
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
-        <div class="field-wrap" style="margin-bottom:0">
-          <div class="field-label" style="justify-content:space-between">
-            <span><span class="lbl-emoji">🏷️</span> 품번</span>
-            <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);font-weight:400">
-              <span class="lbl-emoji">⏱️</span> CT
-              <input type="number" id="inputCT" placeholder="자동" readonly
-                style="width:56px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;padding:2px 5px;outline:none;text-align:right">
-              <span style="color:var(--muted)">초</span>
-            </span>
-          </div>
-          <div style="position:relative" id="productComboWrap">
-            <input type="text" class="field-input" id="inputProduct"
-              placeholder="품번 검색..."
-              oninput="filterProductDropdown(this.value)"
-              onfocus="filterProductDropdown(this.value)"
-              autocomplete="off">
-            <div id="productDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:200;background:var(--bg2);border:1px solid var(--accent);border-radius:10px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div>
-          </div>
+    <!-- 품번 행 -->
+    <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:2px">
+      <div class="field-wrap" style="margin-bottom:0">
+        <div class="field-label" style="justify-content:space-between">
+          <span><span class="lbl-emoji">🏷️</span> 품번</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);font-weight:400">
+            <span class="lbl-emoji">⏱️</span> CT
+            <input type="number" id="inputCT" placeholder="자동" readonly
+              style="width:56px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;padding:2px 5px;outline:none;text-align:right">
+            <span style="color:var(--muted)">초</span>
+          </span>
         </div>
-        <div class="field-wrap" style="margin-bottom:0">
-          <div class="field-label"><span class="lbl-emoji">📝</span> 품명</div>
-          <input type="text" class="field-input" id="inputProductName" placeholder="자동 표시" readonly
-            style="background:var(--bg3);color:var(--accent3);font-family:'Noto Sans KR',sans-serif">
+        <div style="position:relative" id="productComboWrap">
+          <input type="text" class="field-input" id="inputProduct"
+            placeholder="품번 검색..."
+            oninput="filterProductDropdown(this.value)"
+            onfocus="filterProductDropdown(this.value)"
+            autocomplete="off">
+          <div id="productDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:200;background:var(--bg2);border:1px solid var(--accent);border-radius:10px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div>
         </div>
-        <button class="btn-reset-form" onclick="confirmResetForm()" style="height:44px;align-self:end">🔄 초기화</button>
+      </div>
+    </div>
+    <!-- 품명 행 -->
+    <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+      <div class="field-wrap" style="margin-bottom:0">
+        <div class="field-label"><span class="lbl-emoji">📝</span> 품명</div>
+        <input type="text" class="field-input" id="inputProductName" placeholder="자동 표시" readonly
+          style="background:var(--bg3);color:var(--accent3);font-family:'Noto Sans KR',sans-serif">
       </div>
     </div>
   </div>

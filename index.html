@@ -125,7 +125,7 @@ main{padding:16px;max-width:1400px;margin:0 auto}
 .field-input{background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;padding:10px 12px;outline:none;transition:border .2s,box-shadow .2s;width:100%;color-scheme:dark}
 .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,0.1)}
 input[type="date"]::-webkit-calendar-picker-indicator{filter:brightness(0) invert(1) !important;opacity:1 !important;cursor:pointer;padding:2px}
-[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator{filter:none !important}
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator{filter:brightness(0) !important}
 select.field-input{cursor:pointer}
 optgroup{color:var(--muted);font-style:normal}
 
@@ -146,6 +146,9 @@ optgroup{color:var(--muted);font-style:normal}
 .remaining-badge{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
 .remaining-badge.ok{background:rgba(127,255,107,0.1);color:var(--accent3)}
 .remaining-badge.over{background:rgba(255,64,96,0.1);color:var(--danger)}
+#remainFloat{position:fixed;top:64px;right:12px;z-index:90;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px;box-shadow:0 2px 12px rgba(0,0,0,0.25);display:none;pointer-events:none;backdrop-filter:blur(8px);transition:opacity .2s}
+#remainFloat.ok{background:rgba(0,200,81,0.2);color:var(--accent3);border:1px solid rgba(0,200,81,0.4)}
+#remainFloat.over{background:rgba(255,64,96,0.2);color:var(--danger);border:1px solid rgba(255,64,96,0.4)}
 
 /* BUTTONS */
 .btn{border:none;cursor:pointer;border-radius:10px;font-family:'Noto Sans KR',sans-serif;font-weight:700;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
@@ -258,6 +261,30 @@ optgroup{color:var(--muted);font-style:normal}
 .slide-dot.active{background:var(--accent);box-shadow:0 0 6px var(--accent);width:20px;border-radius:4px}
 #lineStatusGrid{transition:opacity .3s}
 #lineStatusGrid.fading{opacity:0}
+
+/* DRAFT */
+.draft-banner{background:var(--card);border:1px solid var(--warn);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
+.draft-banner-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;user-select:none}
+.draft-banner-hdr:hover{background:rgba(255,204,0,0.05)}
+.draft-count-badge{background:var(--warn);color:#000;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:'JetBrains Mono',monospace}
+.draft-list{border-top:1px solid var(--border);padding:8px}
+.draft-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:4px;background:var(--bg2);border:1px solid var(--border);cursor:pointer;transition:border-color .15s}
+.draft-item:last-child{margin-bottom:0}
+.draft-item:hover{border-color:var(--warn)}
+.draft-item-info{flex:1;min-width:0}
+.draft-item-main{font-size:13px;font-weight:700;color:var(--text)}
+.draft-item-sub{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draft-del-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;padding:3px 8px;cursor:pointer;flex-shrink:0;transition:all .15s}
+.draft-del-btn:hover{border-color:var(--danger);color:var(--danger)}
+.draft-load-btn{background:rgba(255,204,0,0.15);border:1px solid var(--warn);border-radius:6px;color:var(--warn);font-size:11px;font-weight:700;padding:3px 10px;cursor:pointer;flex-shrink:0;transition:all .15s}
+.draft-load-btn:hover{background:rgba(255,204,0,0.3)}
+.btn-draft{background:rgba(255,204,0,0.12);border:1px solid var(--warn);border-radius:10px;color:var(--warn);font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;padding:13px 16px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-draft:hover{background:rgba(255,204,0,0.25)}
+.draft-line-badge{display:inline-flex;align-items:center;gap:3px;background:rgba(255,204,0,0.15);border:1px solid var(--warn);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;color:var(--warn)}
+[data-theme="light"] .draft-line-badge{color:#8a6200;border-color:#b38200;background:rgba(180,130,0,0.1)}
+.memo-input{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:13px;padding:10px 12px;outline:none;resize:vertical;min-height:64px;transition:border-color .2s;box-sizing:border-box}
+.memo-input:focus{border-color:var(--warn)}
+.memo-input::placeholder{color:var(--muted);opacity:0.7}
 
 /* ANALYSIS DRILLDOWN */
 .drill-panel{background:var(--card);border:1px solid var(--accent);border-radius:var(--radius-lg);padding:16px;margin-top:14px;animation:drill-in .2s ease}
@@ -508,6 +535,20 @@ optgroup{color:var(--muted);font-style:normal}
 <div class="page" id="page-input">
   <div class="section-title">✏️ 실적 입력</div>
 
+  <!-- 임시저장 목록 -->
+  <div class="draft-banner" id="draftBanner" style="display:none">
+    <div class="draft-banner-hdr" onclick="toggleDraftList()">
+      <span style="font-size:16px">📝</span>
+      <span style="font-size:13px;font-weight:700;color:var(--warn)">임시저장</span>
+      <span class="draft-count-badge" id="draftCountBadge">0</span>
+      <span style="font-size:12px;color:var(--muted)">건 — 클릭하여 목록 보기</span>
+      <span id="draftListChevron" style="margin-left:auto;color:var(--muted);font-size:12px">▼</span>
+    </div>
+    <div id="draftListWrap" style="display:none">
+      <div class="draft-list" id="draftListEl"></div>
+    </div>
+  </div>
+
   <!-- 기본정보 -->
   <div class="form-card">
     <div style="font-size:14px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:12px">📋 기본 정보</div>
@@ -627,7 +668,16 @@ optgroup{color:var(--muted);font-style:normal}
     </div>
   </div>
 
-  <button class="btn btn-save" onclick="saveRecord()">💾 실적 저장</button>
+  <!-- 작업 메모 -->
+  <div class="form-card" style="border-color:rgba(255,204,0,0.3)">
+    <div style="font-size:13px;color:var(--warn);font-weight:700;letter-spacing:1px;margin-bottom:8px">📝 작업 메모 (임시저장 시 함께 저장)</div>
+    <textarea class="memo-input" id="inputMemo" placeholder="작업 중 발생한 사항, 특이사항 등을 자유롭게 기록하세요..."></textarea>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr auto;gap:8px">
+    <button class="btn btn-save" onclick="saveRecord()">💾 실적 저장</button>
+    <button class="btn-draft" onclick="saveDraft()">📝 임시저장</button>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════
@@ -939,6 +989,7 @@ optgroup{color:var(--muted);font-style:normal}
   </div>
 </nav>
 
+<div id="remainFloat" class="ok">잔여 720분</div>
 <div id="toast"></div>
 
 <!-- ══════════════════════════════════════
@@ -1164,6 +1215,9 @@ function showPage(name, tabEl, bnavId) {
     const idx = ['lines','dashboard','input','history','products','codes','line-mgmt','analysis'].indexOf(bnavId);
     document.querySelectorAll('.bnav-btn')[idx]?.classList.add('active');
   }
+  const rf = document.getElementById('remainFloat');
+  if (rf) rf.style.display = name === 'input' ? 'block' : 'none';
+  if (name === 'input')     renderDraftList();
   if (name === 'analysis')  renderAnalysis();
   if (name === 'lines') {
     renderLineStatus();
@@ -1667,6 +1721,8 @@ function calcOEE() {
   const rb = document.getElementById('remainBadge');
   rb.textContent = remain >= 0 ? `잔여 ${remain}분` : `초과 ${-remain}분`;
   rb.className   = 'remaining-badge ' + (remain >= 0 ? 'ok' : 'over');
+  const rf = document.getElementById('remainFloat');
+  if (rf) { rf.textContent = rb.textContent; rf.className = remain >= 0 ? 'ok' : 'over'; }
 
   if (!runMin || !ct) {
     ['previewAvail','previewPerf','previewQual','previewOEE'].forEach(id => document.getElementById(id).textContent = '-');
@@ -1732,7 +1788,7 @@ function saveRecord() {
 }
 
 function resetInputForm() {
-  ['inputQty','inputDefect','inputRunTime','inputGood','inputProduct','inputProductName','inputCT'].forEach(id => {
+  ['inputQty','inputDefect','inputRunTime','inputGood','inputProduct','inputProductName','inputCT','inputMemo'].forEach(id => {
     document.getElementById(id).value = '';
   });
   LOSS_CODES.forEach(c => {
@@ -1753,6 +1809,8 @@ function resetInputForm() {
   const rb = document.getElementById('remainBadge');
   rb.textContent = '잔여 720분';
   rb.className   = 'remaining-badge ok';
+  const rf = document.getElementById('remainFloat');
+  if (rf) { rf.textContent = '잔여 720분'; rf.className = 'ok'; }
 }
 
 function filterCodeTable() {
@@ -2112,6 +2170,7 @@ function buildLineCard(line, idx, solo = false) {
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:${solo?'32px':'22px'}">${cfg.icon}</span>
         <span style="font-family:'Bebas Neue',sans-serif;font-size:${solo?'28px':'20px'};letter-spacing:1px">${line.name}</span>
+        ${(DRAFTS||[]).some(d=>(line.partNos||[]).includes(d.partNo))?`<span class="draft-line-badge">📝 임시저장</span>`:''}
       </div>
       <div style="font-size:${solo?'18px':'14px'};font-weight:700;letter-spacing:0.5px">${cfg.label}</div>
     </div>
@@ -2649,6 +2708,115 @@ function renderCodeList() {
     </div>`).join('');
 }
 
+// ══ 임시저장 ══
+let DRAFTS = [];
+
+function loadDrafts() {
+  try { DRAFTS = JSON.parse(localStorage.getItem('mc_drafts') || '[]'); } catch { DRAFTS = []; }
+}
+
+function saveDraftsStorage() {
+  localStorage.setItem('mc_drafts', JSON.stringify(DRAFTS));
+}
+
+function saveDraft() {
+  const date    = document.getElementById('inputDate').value;
+  const shift   = document.getElementById('inputShift').value;
+  const partNo  = document.getElementById('inputProduct').value.trim();
+  const productName = document.getElementById('inputProductName').value.trim();
+  const ct      = +document.getElementById('inputCT').value || 0;
+  const qty     = +document.getElementById('inputQty').value || 0;
+  const defect  = +document.getElementById('inputDefect').value || 0;
+  const runMin  = +document.getElementById('inputRunTime').value || 0;
+  const inputBy = document.getElementById('inputBy').value.trim();
+  const memo    = document.getElementById('inputMemo').value.trim();
+
+  if (!date && !partNo && !qty) { showToast('⚠️ 저장할 내용이 없습니다'); return; }
+
+  const lossCodes = LOSS_CODES.map(c => {
+    const min  = +(document.getElementById('time_' + c.code)?.value) || 0;
+    const note = (document.getElementById('note_' + c.code)?.value || '').trim();
+    return { code: c.code, min, note };
+  }).filter(x => x.min > 0 || x.note);
+
+  const draft = { id: 'draft-' + Date.now(), savedAt: new Date().toISOString(),
+    date, shift, partNo, productName, ct, qty, defect, runMin, inputBy, memo, lossCodes };
+  DRAFTS.push(draft);
+  saveDraftsStorage();
+  renderDraftList();
+  renderLineStatus();
+  showToast('📝 임시저장 완료');
+}
+
+function loadDraft(id) {
+  const draft = DRAFTS.find(d => d.id === id);
+  if (!draft) return;
+
+  if (draft.date)  document.getElementById('inputDate').value  = draft.date;
+  if (draft.shift) document.getElementById('inputShift').value = draft.shift;
+  document.getElementById('inputProduct').value     = draft.partNo || '';
+  document.getElementById('inputProductName').value = draft.productName || '';
+  document.getElementById('inputCT').value          = draft.ct || '';
+  document.getElementById('inputQty').value         = draft.qty || '';
+  document.getElementById('inputDefect').value      = draft.defect || '';
+  document.getElementById('inputRunTime').value     = draft.runMin || '';
+  document.getElementById('inputBy').value          = draft.inputBy || '';
+  document.getElementById('inputMemo').value        = draft.memo || '';
+  if (draft.date) document.getElementById('inputWeekBadge').textContent = getWeekKey(draft.date);
+
+  (draft.lossCodes || []).forEach(lc => {
+    const timeEl = document.getElementById('time_' + lc.code);
+    const noteEl = document.getElementById('note_' + lc.code);
+    if (timeEl) timeEl.value = lc.min || '';
+    if (noteEl) noteEl.value = lc.note || '';
+  });
+  calcOEE();
+
+  showPage('input', document.querySelector('.tab-btn:nth-child(3)'), 'input');
+  showToast('📂 임시저장 불러옴');
+}
+
+function deleteDraft(id, e) {
+  if (e) e.stopPropagation();
+  DRAFTS = DRAFTS.filter(d => d.id !== id);
+  saveDraftsStorage();
+  renderDraftList();
+  renderLineStatus();
+  showToast('🗑️ 임시저장 삭제됨');
+}
+
+function renderDraftList() {
+  const banner = document.getElementById('draftBanner');
+  const badge  = document.getElementById('draftCountBadge');
+  const el     = document.getElementById('draftListEl');
+  if (!banner) return;
+  if (!DRAFTS.length) { banner.style.display = 'none'; return; }
+  banner.style.display = 'block';
+  if (badge) badge.textContent = DRAFTS.length;
+  if (!el) return;
+  el.innerHTML = [...DRAFTS].reverse().map(d => {
+    const time = new Date(d.savedAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const sub  = [d.partNo && `🏷️ ${d.partNo}`, d.memo && `📝 ${d.memo.slice(0,30)}`].filter(Boolean).join(' ');
+    return `<div class="draft-item" onclick="loadDraft('${d.id}')">
+      <div class="draft-item-info">
+        <div class="draft-item-main">${d.date||'날짜없음'} · ${shiftLabel(d.shift)} · ${d.qty||'-'}개</div>
+        <div class="draft-item-sub">${sub || '내용 없음'} · ${time}</div>
+      </div>
+      <button class="draft-load-btn" onclick="loadDraft('${d.id}');event.stopPropagation()">불러오기</button>
+      <button class="draft-del-btn" onclick="deleteDraft('${d.id}',event)">삭제</button>
+    </div>`;
+  }).join('');
+}
+
+function toggleDraftList() {
+  const wrap = document.getElementById('draftListWrap');
+  const chev = document.getElementById('draftListChevron');
+  if (!wrap) return;
+  const open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : 'block';
+  if (chev) chev.textContent = open ? '▼' : '▲';
+}
+
 // ══ 분석 ══
 let analysisPeriod = 'week';
 
@@ -2947,6 +3115,7 @@ function applyTheme(theme) {
 // ══ INIT ══
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme(localStorage.getItem('mc_theme') || 'dark');
+  loadDrafts();
   initHeader();
   loadData(() => {
     // worker(string) → workers(array) 마이그레이션
@@ -2963,6 +3132,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderDashboard();
     renderHistory();
     renderLineStatus();
+    renderDraftList();
     applyProductCollapsed();
     applyCodeCollapsed();
     applyLineMgmtCollapsed();

@@ -284,6 +284,8 @@ optgroup{color:var(--muted);font-style:normal}
 .draft-load-btn{background:rgba(255,204,0,0.15);border:1px solid var(--warn);border-radius:6px;color:var(--warn);font-size:12px;font-weight:700;padding:5px 18px;cursor:pointer;transition:all .15s}
 .draft-load-btn:hover{background:rgba(255,204,0,0.3)}
 .btn-draft{background:rgba(255,204,0,0.12);border:1px solid var(--warn);border-radius:10px;color:var(--warn);font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;padding:13px 16px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-reset-form{background:rgba(107,127,163,0.12);border:1px solid var(--muted);border-radius:10px;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;padding:13px 16px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-reset-form:hover{border-color:var(--danger);color:var(--danger)}
 .btn-draft:hover{background:rgba(255,204,0,0.25)}
 .draft-line-badge{display:inline-flex;align-items:center;gap:3px;background:rgba(255,204,0,0.15);border:1px solid var(--warn);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;color:var(--warn)}
 [data-theme="light"] .draft-line-badge{color:#8a6200;border-color:#b38200;background:rgba(180,130,0,0.1)}
@@ -588,31 +590,32 @@ optgroup{color:var(--muted);font-style:normal}
       </div>
     </div>
     <div class="form-row full">
-      <div class="field-wrap">
-        <div class="field-label" style="justify-content:space-between">
-          <span><span class="lbl-emoji">🏷️</span> 품번</span>
-          <span style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted);font-weight:400;letter-spacing:0">
-            <span class="lbl-emoji">⏱️</span> CT
-            <input type="number" id="inputCT" placeholder="자동" readonly
-              style="width:70px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;padding:2px 6px;outline:none;text-align:right">
-            <span style="color:var(--muted)">초/ea</span>
-          </span>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+        <div class="field-wrap" style="margin-bottom:0">
+          <div class="field-label" style="justify-content:space-between">
+            <span><span class="lbl-emoji">🏷️</span> 품번</span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);font-weight:400">
+              <span class="lbl-emoji">⏱️</span> CT
+              <input type="number" id="inputCT" placeholder="자동" readonly
+                style="width:56px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;padding:2px 5px;outline:none;text-align:right">
+              <span style="color:var(--muted)">초</span>
+            </span>
+          </div>
+          <div style="position:relative" id="productComboWrap">
+            <input type="text" class="field-input" id="inputProduct"
+              placeholder="품번 검색..."
+              oninput="filterProductDropdown(this.value)"
+              onfocus="filterProductDropdown(this.value)"
+              autocomplete="off">
+            <div id="productDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:200;background:var(--bg2);border:1px solid var(--accent);border-radius:10px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div>
+          </div>
         </div>
-        <div style="position:relative" id="productComboWrap">
-          <input type="text" class="field-input" id="inputProduct"
-            placeholder="품번 입력 또는 검색..."
-            oninput="filterProductDropdown(this.value)"
-            onfocus="filterProductDropdown(this.value)"
-            autocomplete="off">
-          <div id="productDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:200;background:var(--bg2);border:1px solid var(--accent);border-radius:10px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div>
+        <div class="field-wrap" style="margin-bottom:0">
+          <div class="field-label"><span class="lbl-emoji">📝</span> 품명</div>
+          <input type="text" class="field-input" id="inputProductName" placeholder="자동 표시" readonly
+            style="background:var(--bg3);color:var(--accent3);font-family:'Noto Sans KR',sans-serif">
         </div>
-      </div>
-    </div>
-    <div class="form-row full" style="margin-top:-4px">
-      <div class="field-wrap">
-        <div class="field-label"><span class="lbl-emoji">📝</span> 품명</div>
-        <input type="text" class="field-input" id="inputProductName" placeholder="품번 선택 시 자동 표시" readonly
-          style="background:var(--bg3);color:var(--accent3);font-family:'Noto Sans KR',sans-serif">
+        <button class="btn-reset-form" onclick="confirmResetForm()" style="height:44px;align-self:end">🔄 초기화</button>
       </div>
     </div>
   </div>
@@ -670,6 +673,9 @@ optgroup{color:var(--muted);font-style:normal}
       <div class="stat-mini"><div class="stat-mini-val" style="color:var(--accent2)" id="previewPerf">-</div><div class="stat-mini-lbl">⚡ 성능률</div></div>
       <div class="stat-mini"><div class="stat-mini-val" style="color:var(--accent3)" id="previewQual">-</div><div class="stat-mini-lbl">✅ 품질률</div></div>
       <div class="stat-mini" style="border-color:var(--warn)"><div class="stat-mini-val" style="color:var(--warn)" id="previewOEE">-</div><div class="stat-mini-lbl">🏆 OEE</div></div>
+    </div>
+    <div id="unaccountedWarn" style="display:none;margin-top:8px;padding:6px 10px;background:rgba(255,100,60,0.12);border:1px solid rgba(255,100,60,0.35);border-radius:8px;font-size:12px;color:#ff6432">
+      ⚠️ 가동시간을 자동계산보다 <b id="unaccountedMin"></b>분 늘렸습니다 — 성능률이 낮아집니다. 해당 시간을 손실코드로 입력하거나 가동시간을 줄이세요.
     </div>
   </div>
 
@@ -1701,8 +1707,10 @@ function autoRunTime() {
   const qty = +document.getElementById('inputQty').value || 0;
   const ct  = +document.getElementById('inputCT').value  || 0;
   const el  = document.getElementById('inputRunTime');
+  const autoVal = (qty && ct) ? Math.min(Math.ceil(qty * ct / 60), TOTAL_MIN) : 0;
+  el.dataset.autoVal = autoVal;
   if (!qty || !ct || el.dataset.manual) return;
-  el.value = Math.min(Math.ceil(qty * ct / 60), TOTAL_MIN);
+  el.value = autoVal;
 }
 
 function resetAutoRunTime() {
@@ -1747,6 +1755,19 @@ function calcOEE() {
   document.getElementById('previewPerf').textContent  = fmt(perf);
   document.getElementById('previewQual').textContent  = fmt(qual);
   document.getElementById('previewOEE').textContent   = fmt(avail * perf * qual);
+
+  const runEl   = document.getElementById('inputRunTime');
+  const autoVal = +(runEl.dataset.autoVal) || 0;
+  const isManualIncrease = runEl.dataset.manual && autoVal > 0 && runMin > autoVal;
+  const warnEl  = document.getElementById('unaccountedWarn');
+  if (warnEl) {
+    if (isManualIncrease) {
+      document.getElementById('unaccountedMin').textContent = runMin - autoVal;
+      warnEl.style.display = 'block';
+    } else {
+      warnEl.style.display = 'none';
+    }
+  }
 }
 
 function saveRecord() {
@@ -1763,6 +1784,12 @@ function saveRecord() {
   if (!qty)    { showToast('⚠️ 생산수량을 입력하세요'); return; }
   if (!runMin) { showToast('⚠️ 가동시간을 입력하세요'); return; }
   if (!ct)     { showToast('⚠️ CT 없음 (품번 재선택)'); return; }
+  const runEl   = document.getElementById('inputRunTime');
+  const autoVal = +(runEl.dataset.autoVal) || 0;
+  if (runEl.dataset.manual && autoVal > 0 && runMin > autoVal) {
+    showToast('⛔ 가동시간이 자동계산보다 큽니다. 손실코드를 추가하거나 가동시간을 줄이세요.');
+    return;
+  }
 
   const good = Math.max(0, qty - defect);
   let plannedSum = 0;
@@ -1796,6 +1823,12 @@ function saveRecord() {
   renderDashboard();
   renderHistory();
   renderLineStatus();
+}
+
+function confirmResetForm() {
+  if (!confirm('입력 중인 내용을 모두 초기화하시겠습니까?')) return;
+  resetInputForm();
+  showToast('🔄 초기화되었습니다');
 }
 
 function resetInputForm() {

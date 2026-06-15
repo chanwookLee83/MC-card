@@ -2748,7 +2748,7 @@ function saveDraft() {
   const draft = { id: 'draft-' + Date.now(), savedAt: new Date().toISOString(),
     date, shift, partNo, productName, ct, qty, defect, runMin, inputBy, memo, lossCodes };
   DRAFTS.push(draft);
-  saveDraftsStorage();
+  saveData();
   renderDraftList();
   renderLineStatus();
   showToast('📝 임시저장 완료');
@@ -2785,7 +2785,7 @@ function loadDraft(id) {
 function deleteDraft(id, e) {
   if (e) e.stopPropagation();
   DRAFTS = DRAFTS.filter(d => d.id !== id);
-  saveDraftsStorage();
+  saveData();
   renderDraftList();
   renderLineStatus();
   showToast('🗑️ 임시저장 삭제됨');

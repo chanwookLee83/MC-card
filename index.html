@@ -2887,13 +2887,14 @@ function setAnalysisPeriod(p, btn) {
 }
 
 function getWeekKey(dateStr) {
-  // "YYYY-MM-DD" 문자열을 UTC가 아닌 로컬 시간(KST)으로 파싱
+  // ISO 8601 기준 주차 계산 (월요일 시작, 목요일 포함 주가 1주차)
   const [y, mo, day] = dateStr.split('-').map(Number);
-  const d = new Date(y, mo - 1, day);          // 로컬 자정
-  const jan1 = new Date(d.getFullYear(), 0, 1); // 로컬 자정
-  const dayOfYear = Math.round((d - jan1) / 86400000); // 정수 보장
-  const wk = Math.ceil((dayOfYear + jan1.getDay() + 1) / 7);
-  return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;
+  const d = new Date(Date.UTC(y, mo - 1, day));
+  const dayOfWeek = d.getUTCDay() || 7;          // 일요일=7로 변환
+  d.setUTCDate(d.getUTCDate() + 4 - dayOfWeek);  // 해당 주 목요일로 이동
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const wk = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(wk).padStart(2,'0')}`;
 }
 
 function groupRecords(period) {

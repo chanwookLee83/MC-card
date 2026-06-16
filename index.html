@@ -1137,7 +1137,7 @@ function loadData(callback) {
 function setupRealtimeSync() {
   if (!fbDB) return;
   fbDB.ref(FB_REF).on('value', snap => {
-    if (Date.now() - _lastLocalSave < 2000) return;
+    if (Date.now() - _lastLocalSave < 5000) return;
     const d = snap.val();
     if (!d) return;
     if (Array.isArray(d.products))  PRODUCTS   = d.products;
@@ -1242,10 +1242,9 @@ function showPage(name, tabEl, bnavId) {
   if (name === 'analysis')  renderAnalysis();
   if (name === 'lines') {
     renderLineStatus();
-    if (_slideActive) startSlideTimer();
-  } else {
-    stopSlideTimer();
+    if (_slideActive && !_slideTimer) startSlideTimer();
   }
+  // 다른 탭으로 이동해도 타이머 유지 - 가동현황 복귀 시 이어받음
   if (name === 'line-mgmt') renderLineMgmt();
 }
 
@@ -2075,6 +2074,11 @@ function confirmDelete() {
 //  라인 가동현황
 // ══════════════════════════════
 function renderLineStatus() {
+  _renderLineStatusNoTimerReset();
+}
+
+// 타이머 재시작 없이 화면만 갱신 (실적저장/Firebase 동기화 시 사용)
+function _renderLineStatusNoTimerReset() {
   renderSlicedLineStatus();
 }
 

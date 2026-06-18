@@ -706,7 +706,20 @@ optgroup{color:var(--muted);font-style:normal}
     <button class="period-btn" onclick="setPeriod('month',this)">🗓️ 월별</button>
   </div>
   <select class="dash-filter-select" id="histFilterSelect" onchange="setHistFilter(this.value)" style="margin-top:8px"></select>
-  <div class="tbl-scroll" style="margin-top:8px">
+
+  <!-- 모델별 생산량 합계 -->
+  <div id="histSummarySection" style="margin-top:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="section-title" style="margin-bottom:0">📊 모델별 생산량 합계</div>
+      <button id="histSummaryToggle" onclick="toggleHistSummary()" style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;padding:5px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0">▲ 접기</button>
+    </div>
+    <div id="histSummaryBody"></div>
+  </div>
+
+  <div class="tbl-scroll" style="margin-top:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="section-title" style="margin-bottom:0">📋 상세 실적</div>
+    </div>
     <table class="hist-table">
       <thead><tr><th>📅 날짜</th><th>🔄</th><th>🏷️ 품번</th><th>📦 생산</th><th>❌ 불량</th><th>⏱️ 가용</th><th>⚡ 성능</th><th>✅ 품질</th><th>🏆 OEE</th><th>👤 입력자</th><th></th></tr></thead>
       <tbody id="historyTbody"></tbody>
@@ -1444,6 +1457,7 @@ function renderHistory() {
   if (!base.length) {
     tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--muted)">📭 저장된 실적이 없습니다</td></tr>`;
     renderCodeAnalysis([]);
+    renderHistorySummary(base);
     return;
   }
 
@@ -1496,6 +1510,116 @@ function renderHistory() {
 
   tbody.innerHTML = rows.join('');
   renderCodeAnalysis(base);
+  renderHistorySummary(base);
+}
+
+// ══════════════════════════════
+//  모델별 생산량 합계 (이력조회)
+// ══════════════════════════════
+let histSummaryCollapsed = false;
+
+function toggleHistSummary() {
+  histSummaryCollapsed = !histSummaryCollapsed;
+  const body = document.getElementById('histSummaryBody');
+  const btn  = document.getElementById('histSummaryToggle');
+  if (body) body.style.display = histSummaryCollapsed ? 'none' : '';
+  if (btn)  btn.textContent = histSummaryCollapsed ? '▼ 펼치기' : '▲ 접기';
+}
+
+function renderHistorySummary(base) {
+  const el = document.getElementById('histSummaryBody');
+  if (!el) return;
+
+  if (histSummaryCollapsed) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+
+  const records = base !== undefined ? base : (histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter));
+
+  if (!records.length) {
+    el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--muted)">📭 데이터 없음</div>`;
+    return;
+  }
+
+  // 기간별 그룹핑
+  const periodMap = {};
+  records.forEach(r => {
+    let groupKey, groupLabel;
+    if (histPeriod === 'week') {
+      groupKey = getWeekKey(r.date);
+      const [yr, wk] = groupKey.split('-W');
+      groupLabel = `${yr}년 ${+wk}주차`;
+    } else if (histPeriod === 'month') {
+      groupKey = r.date.slice(0, 7);
+      const [yr, mo] = groupKey.split('-');
+      groupLabel = `${yr}년 ${+mo}월`;
+    } else {
+      groupKey = r.date;
+      groupLabel = r.date;
+    }
+    if (!periodMap[groupKey]) periodMap[groupKey] = { label: groupLabel, models: {} };
+    const m = periodMap[groupKey].models;
+    if (!m[r.partNo]) m[r.partNo] = { qty: 0, defect: 0 };
+    m[r.partNo].qty    += (r.qty    || 0);
+    m[r.partNo].defect += (r.defect || 0);
+  });
+
+  const sorted = Object.entries(periodMap).sort((a, b) => b[0].localeCompare(a[0]));
+  const barColors = ['var(--accent)', 'var(--accent2)', 'var(--accent3)', 'var(--warn)', '#8866ff', 'var(--muted)'];
+
+  el.innerHTML = sorted.map(([, { label, models }]) => {
+    const entries   = Object.entries(models).sort((a, b) => b[1].qty - a[1].qty);
+    const totalQty  = entries.reduce((s, [, m]) => s + m.qty,    0);
+    const totalDef  = entries.reduce((s, [, m]) => s + m.defect, 0);
+    const totalGood = totalQty - totalDef;
+
+    const rows = entries.map(([partNo, data], i) => {
+      const p    = PRODUCTS.find(x => x.no === partNo);
+      const good = data.qty - data.defect;
+      const pct  = totalQty > 0 ? Math.round(data.qty / totalQty * 100) : 0;
+      const col  = barColors[i % barColors.length];
+      return `
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+          <div style="width:3px;height:32px;background:${col};border-radius:2px;flex-shrink:0"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:${col}">${partNo}</div>
+            ${p ? `<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>` : ''}
+            <div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:${col};border-radius:2px"></div>
+            </div>
+          </div>
+          <div style="flex-shrink:0;text-align:right;min-width:90px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--text)">${data.qty.toLocaleString()}</div>
+            <div style="font-size:10px;color:var(--muted)">불량 <span style="color:var(--danger);font-weight:700">${data.defect}</span> · 양품 <span style="color:var(--accent3);font-weight:700">${good.toLocaleString()}</span></div>
+          </div>
+          <div style="width:32px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0">${pct}%</div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:700;color:var(--accent)">📅 ${label}</div>
+          <div style="display:flex;gap:14px;flex-shrink:0">
+            <div style="text-align:right">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--text);line-height:1">${totalQty.toLocaleString()}</div>
+              <div style="font-size:10px;color:var(--muted)">총 생산</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--accent3);line-height:1">${totalGood.toLocaleString()}</div>
+              <div style="font-size:10px;color:var(--muted)">총 양품</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--danger);line-height:1">${totalDef.toLocaleString()}</div>
+              <div style="font-size:10px;color:var(--muted)">총 불량</div>
+            </div>
+          </div>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('');
 }
 
 function renderCodeAnalysis(filteredRecords, contextRecord) {

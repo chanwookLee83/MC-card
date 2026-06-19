@@ -1041,6 +1041,7 @@ const FIREBASE_CONFIG = {
 let fbDB = null;
 const FB_REF = 'mc';
 let _lastLocalSave = 0;
+let _lastDraftSave = 0;
 let _syncReady     = false;
 
 if (FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY') {
@@ -1102,7 +1103,7 @@ function saveData() {
   localStorage.setItem('mc_drafts',     JSON.stringify(DRAFTS));
   if (!fbDB) return;
   _lastLocalSave = Date.now();
-  fbDB.ref(FB_REF).set({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES, lines: LINES, drafts: DRAFTS })
+  fbDB.ref(FB_REF).update({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES, lines: LINES })
     .then(() => showToast('✅ 저장됨'))
     .catch(e => { console.warn('[Firebase] 저장 실패:', e); showToast('❌ 저장 실패'); });
 }
@@ -1157,13 +1158,21 @@ function setupRealtimeSync() {
     if (Array.isArray(d.records))   RECORDS    = d.records;
     if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
     if (Array.isArray(d.lines))     LINES      = d.lines;
-    if (Array.isArray(d.drafts))    DRAFTS     = d.drafts;
     renderDashboard(); renderHistory(); renderLineStatus();
     renderProductList(); renderCodeList(); renderCodeTable();
     renderDraftList();
     syncProductSelect();
     if (_syncReady) showToast('🔄 다른 기기에서 동기화됨');
     _syncReady = true;
+  });
+  fbDB.ref(FB_REF + '/drafts').on('value', snap => {
+    if (Date.now() - _lastDraftSave < 5000) return;
+    if (!_syncReady) return;
+    const d = snap.val();
+    DRAFTS = Array.isArray(d) ? d : [];
+    localStorage.setItem('mc_drafts', JSON.stringify(DRAFTS));
+    renderDraftList();
+    renderLineStatus();
   });
   fbDB.ref(FB_REF + '/slideState').on('value', snap => {
     if (Date.now() - _lastSlideSave < 2000) return;
@@ -2907,6 +2916,10 @@ function loadDrafts() {
 
 function saveDraftsStorage() {
   localStorage.setItem('mc_drafts', JSON.stringify(DRAFTS));
+  if (!fbDB) return;
+  _lastDraftSave = Date.now();
+  fbDB.ref(FB_REF + '/drafts').set(DRAFTS)
+    .catch(e => console.warn('[Firebase] 임시저장 실패:', e));
 }
 
 function saveDraft() {
@@ -2941,6 +2954,7 @@ function saveDraft() {
   if (loadedDraftId) loadedDraftId = draft.id;
 
   saveData();
+  saveDraftsStorage();
   renderDraftList();
   renderLineStatus();
   showToast(hadPrev ? '📝 기존 임시저장 교체 완료' : '📝 임시저장 완료');
@@ -2997,7 +3011,7 @@ function loadDraft(id) {
 function deleteDraft(id, e) {
   if (e) e.stopPropagation();
   DRAFTS = DRAFTS.filter(d => d.id !== id);
-  saveData();
+  saveDraftsStorage();
   renderDraftList();
   renderLineStatus();
   showToast('🗑️ 임시저장 삭제됨');

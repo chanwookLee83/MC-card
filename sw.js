@@ -1,6 +1,6 @@
-// ⚙️ 머신카드 Service Worker v5.5
-const CACHE_NAME = 'machine-card-v62';
-const STATIC_CACHE = 'machine-card-static-v62';
+// ⚙️ 머신카드 Service Worker v5.6
+const CACHE_NAME = 'machine-card-v63';
+const STATIC_CACHE = 'machine-card-static-v63';
 
 // 캐시할 파일 목록
 const CACHE_FILES = [
@@ -24,8 +24,14 @@ self.addEventListener('install', event => {
     caches.open(STATIC_CACHE).then(cache => {
       console.log('[SW] 정적 파일 캐싱');
       return Promise.allSettled(CACHE_FILES.map(f => cache.add(f)));
-    }).then(() => self.skipWaiting())
+    })
+    // skipWaiting은 배너에서 사용자가 확인 후 메시지로 호출
   );
+});
+
+// ── skipWaiting 메시지 수신 ──
+self.addEventListener('message', event => {
+  if (event.data === 'skipWaiting') self.skipWaiting();
 });
 
 // ── 활성화 ──

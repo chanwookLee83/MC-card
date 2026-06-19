@@ -3341,6 +3341,36 @@ function applyTheme(theme) {
   }
 }
 
+// ══ 08:00 가동현황 자동 초기화 ══
+function resetAllLineStatuses() {
+  let changed = false;
+  LINES.forEach(line => {
+    if (line.status && line.status !== 'idle') {
+      line.status   = 'idle';
+      line.statusAt = new Date().toISOString();
+      changed = true;
+    }
+  });
+  if (changed) {
+    saveData();
+    renderLineStatus();
+    showToast('🌅 08:00 가동현황 비가동 초기화');
+  }
+}
+
+function scheduleLineStatusReset() {
+  const now   = new Date();
+  const next8  = new Date(now);
+  next8.setHours(8, 0, 0, 0);
+  if (next8 <= now) next8.setDate(next8.getDate() + 1);
+  const msUntil = next8 - now;
+
+  setTimeout(() => {
+    resetAllLineStatuses();
+    setInterval(resetAllLineStatuses, 24 * 60 * 60 * 1000);
+  }, msUntil);
+}
+
 // ══ INIT ══
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme(localStorage.getItem('mc_theme') || 'dark');
@@ -3365,6 +3395,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyProductCollapsed();
     applyCodeCollapsed();
     applyLineMgmtCollapsed();
+    scheduleLineStatusReset();
   });
 });
 

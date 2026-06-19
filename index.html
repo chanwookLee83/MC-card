@@ -3336,31 +3336,44 @@ function toggleDrillCodeDetail(key, code) {
   const grouped  = groupRecords(analysisPeriod);
   const currRecs = grouped[key] || [];
 
-  // 라인별 손실 시간 집계
+  // 라인별 손실 시간 + 사유 집계
   const lineMap = {};
   currRecs.forEach(r => {
     const lc = (r.lossCodes || []).find(l => l.code === code && l.min > 0);
     if (!lc) return;
     const matched = LINES.filter(l => (l.partNos || []).includes(r.partNo)).map(l => l.name);
     const labels  = matched.length ? matched : ['미배정'];
-    labels.forEach(name => { lineMap[name] = (lineMap[name] || 0) + lc.min; });
+    const note    = (lc.note || '').trim();
+    labels.forEach(name => {
+      if (!lineMap[name]) lineMap[name] = { min: 0, notes: [] };
+      lineMap[name].min += lc.min;
+      if (note && !lineMap[name].notes.includes(note)) lineMap[name].notes.push(note);
+    });
   });
 
-  const entries = Object.entries(lineMap).sort((a, b) => b[1] - a[1]);
+  const entries = Object.entries(lineMap).sort((a, b) => b[1].min - a[1].min);
   if (!entries.length) return;
 
-  const maxMin    = entries[0][1];
+  const maxMin    = entries[0][1].min;
   const barColors = ['var(--accent)', 'var(--accent2)', 'var(--accent3)', 'var(--warn)', '#8866ff'];
 
-  const rows = entries.map(([name, min], i) => {
-    const pct = Math.round(min / maxMin * 100);
-    const col = barColors[i % barColors.length];
+  const rows = entries.map(([name, data], i) => {
+    const pct      = Math.round(data.min / maxMin * 100);
+    const col      = barColors[i % barColors.length];
+    const noteHtml = data.notes.length
+      ? `<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px">
+          ${data.notes.map(n => `<span style="font-size:10px;color:var(--muted);background:rgba(255,255,255,0.06);border-radius:4px;padding:1px 6px">📝 ${n}</span>`).join('')}
+        </div>`
+      : '';
     return `<div style="display:flex;align-items:center;gap:8px">
-      <div style="font-size:12px;font-weight:600;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
-      <div style="flex:2;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+        ${noteHtml}
+      </div>
+      <div style="flex:2;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0">
         <div style="height:100%;width:${pct}%;background:${col};border-radius:3px"></div>
       </div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:${col};min-width:44px;text-align:right;flex-shrink:0">${min}분</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:${col};min-width:44px;text-align:right;flex-shrink:0">${data.min}분</div>
       <div style="font-size:10px;color:var(--muted);min-width:28px;text-align:right;flex-shrink:0">${pct}%</div>
     </div>`;
   }).join('');

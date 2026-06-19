@@ -1944,11 +1944,19 @@ function saveRecord() {
   const qual  = qty > 0 ? good / qty : 0;
 
   RECORDS.push({ date, shift, partNo, qty, defect, good, runMin, ct, avail, perf, qual, lossCodes, inputBy });
+
+  // 임시저장에서 불러온 데이터로 저장 시 해당 임시저장 자동 삭제
+  if (loadedDraftId) {
+    DRAFTS = DRAFTS.filter(d => d.id !== loadedDraftId);
+    loadedDraftId = null;
+  }
+
   saveData();
   showToast('💾 실적이 저장되었습니다!');
   resetInputForm();
   renderDashboard();
   renderHistory();
+  renderDraftList();
   renderLineStatus();
 }
 
@@ -1982,6 +1990,7 @@ function resetInputForm() {
   rb.className   = 'remaining-badge ok';
   const rf = document.getElementById('remainFloat');
   if (rf) { rf.textContent = '잔여 720분'; rf.className = 'ok'; }
+  loadedDraftId = null;
 }
 
 function filterCodeTable() {
@@ -2917,16 +2926,29 @@ function saveDraft() {
 
   const draft = { id: 'draft-' + Date.now(), savedAt: new Date().toISOString(),
     date, shift, partNo, productName, ct, qty, defect, runMin, inputBy, memo, lossCodes };
+
+  // 같은 품번의 기존 임시저장은 자동 삭제 후 최신으로 대체
+  const hadPrev = partNo && DRAFTS.some(d => d.partNo === partNo);
+  if (partNo) DRAFTS = DRAFTS.filter(d => d.partNo !== partNo);
   DRAFTS.push(draft);
+
+  // 불러온 임시저장도 같은 품번이면 교체됐으므로 새 ID로 갱신
+  if (loadedDraftId) loadedDraftId = draft.id;
+
   saveData();
   renderDraftList();
   renderLineStatus();
-  showToast('📝 임시저장 완료');
+  showToast(hadPrev ? '📝 기존 임시저장 교체 완료' : '📝 임시저장 완료');
+  resetInputForm();
 }
+
+let loadedDraftId = null;
 
 function loadDraft(id) {
   const draft = DRAFTS.find(d => d.id === id);
   if (!draft) return;
+
+  loadedDraftId = id;
 
   if (draft.date)  document.getElementById('inputDate').value  = draft.date;
   if (draft.shift) document.getElementById('inputShift').value = draft.shift;
@@ -2935,7 +2957,6 @@ function loadDraft(id) {
   document.getElementById('inputCT').value          = draft.ct || '';
   document.getElementById('inputQty').value         = draft.qty || '';
   document.getElementById('inputDefect').value      = draft.defect || '';
-  document.getElementById('inputRunTime').value     = draft.runMin || '';
   document.getElementById('inputBy').value          = draft.inputBy || '';
   document.getElementById('inputMemo').value        = draft.memo || '';
   if (draft.date) document.getElementById('inputWeekBadge').textContent = getWeekKey(draft.date);
@@ -2946,6 +2967,22 @@ function loadDraft(id) {
     if (timeEl) timeEl.value = lc.min || '';
     if (noteEl) noteEl.value = lc.note || '';
   });
+
+  // 자동계산 값(dataset.autoVal)을 먼저 계산한 뒤 임시저장 가동시간과 비교
+  const runEl = document.getElementById('inputRunTime');
+  runEl.dataset.manual = '';
+  document.getElementById('autoRunHint').style.display = 'none';
+  autoRunTime(); // dataset.autoVal 설정
+  const autoVal    = +(runEl.dataset.autoVal) || 0;
+  const savedRunMin = draft.runMin || 0;
+  if (savedRunMin && autoVal > 0 && savedRunMin > autoVal) {
+    // 자동계산보다 증가된 가동시간이 저장된 경우 → manual 플래그 유지
+    runEl.value = savedRunMin;
+    runEl.dataset.manual = '1';
+    document.getElementById('autoRunHint').style.display = 'inline';
+  } else {
+    runEl.value = savedRunMin || (autoVal || '');
+  }
   calcOEE();
 
   showPage('input', document.querySelector('.tab-btn:nth-child(3)'), 'input');

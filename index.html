@@ -995,9 +995,26 @@ optgroup{color:var(--muted);font-style:normal}
     <button class="period-btn" onclick="setAnalysisPeriod('product',this)">🏷️ 품번별</button>
   </div>
 
+  <!-- 품번별 검색 (품번별 모드에서만 표시) -->
+  <input type="text" class="field-input" id="analysisProductSearch" placeholder="🔍 품번 또는 품명 검색" oninput="renderAnalysis()" style="display:none;margin-bottom:16px">
+
+  <!-- 정렬 기준 -->
+  <select class="dash-filter-select" id="analysisSortSelect" onchange="renderAnalysis()">
+    <option value="default">🕐 최신순</option>
+    <option value="oee_desc">🏆 OEE 높은순</option>
+    <option value="oee_asc">🏆 OEE 낮은순</option>
+    <option value="defrate_desc">❌ 불량률 높은순</option>
+    <option value="defrate_asc">❌ 불량률 낮은순</option>
+    <option value="qty_desc">📦 생산량 많은순</option>
+    <option value="qty_asc">📦 생산량 적은순</option>
+  </select>
+
   <!-- 차트 -->
   <div class="form-card" style="margin-bottom:16px">
-    <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:14px" id="analysisChartTitle">📊 OEE 비교</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:16px;font-weight:700;color:var(--accent);letter-spacing:1px" id="analysisChartTitle">📊 OEE 비교</div>
+      <button id="analysisChartToggle" onclick="toggleAnalysisChart()" style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;padding:5px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0"></button>
+    </div>
     <div id="analysisChart" style="min-height:80px"></div>
   </div>
 
@@ -1020,7 +1037,7 @@ optgroup{color:var(--muted);font-style:normal}
     <div style="font-size:13px;color:var(--muted);margin-bottom:8px">가동시간 + 손실코드 합계가 <b style="color:var(--warn)">정확히 720분</b>이어야 합니다.</div>
     <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;margin-bottom:6px" id="timeWarnUsed">-</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:20px" id="timeWarnMsg">-</div>
-    <button onclick="document.getElementById('timeWarnModal').style.display='none'" class="btn" style="width:100%;padding:13px;border-radius:10px;font-size:15px;font-weight:700;background:linear-gradient(135deg,var(--warn),#cc9900);color:#000">✔ 확인</button>
+    <button onclick="closeTimeWarnModal()" class="btn" style="width:100%;padding:13px;border-radius:10px;font-size:15px;font-weight:700;background:linear-gradient(135deg,var(--warn),#cc9900);color:#000">✔ 확인</button>
   </div>
 </div>
 
@@ -1116,6 +1133,9 @@ let selectedCodeEmoji    = '🔴';
 const TOTAL_MIN_VAL = 720;
 
 // ══ 저장 / 불러오기 (Firebase + localStorage 이중화) ══
+// products/lossCodes/lines는 변경 빈도가 낮고 충돌 가능성이 적어 전체 덮어쓰기를 유지한다.
+// records(실적)는 여러 사람이 동시에 입력하는 빈도가 높아, 개별 키 단위 push/update/remove로 처리해
+// 동시 저장 시 서로의 데이터를 지우지 않도록 한다.
 function saveData() {
   localStorage.setItem('mc_products',   JSON.stringify(PRODUCTS));
   localStorage.setItem('mc_records',    JSON.stringify(RECORDS));
@@ -1124,9 +1144,52 @@ function saveData() {
   localStorage.setItem('mc_drafts',     JSON.stringify(DRAFTS));
   if (!fbDB) return;
   _lastLocalSave = Date.now();
-  fbDB.ref(FB_REF).update({ products: PRODUCTS, records: RECORDS, lossCodes: LOSS_CODES, lines: LINES })
+  fbDB.ref(FB_REF).update({ products: PRODUCTS, lossCodes: LOSS_CODES, lines: LINES })
     .then(() => showToast('✅ 저장됨'))
     .catch(e => { console.warn('[Firebase] 저장 실패:', e); showToast('❌ 저장 실패'); });
+}
+
+// records 객체({key: record}) → 배열 변환 (각 항목에 _key 보존)
+function _recordsObjToArray(obj) {
+  if (!obj) return [];
+  if (Array.isArray(obj)) {
+    // 과거(배열 저장) 데이터와의 호환 — 마이그레이션 전 데이터를 읽을 때 사용
+    return obj.filter(Boolean).map((r, i) => ({ ...r, _key: r._key || ('legacy-' + i) }));
+  }
+  return Object.entries(obj).map(([key, r]) => ({ ...r, _key: key }));
+}
+
+// 실적 1건 추가 — Firebase push()로 고유 키 발급 (동시 입력 시 키 충돌 없음)
+function addRecordToFirebase(record) {
+  const local = { ...record, _key: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2) };
+  RECORDS.push(local);
+  localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+  if (!fbDB) return;
+  const ref = fbDB.ref(FB_REF + '/records').push();
+  local._key = ref.key; // 로컬 임시키를 실제 Firebase 키로 교체
+  ref.set(record)
+    .then(() => showToast('✅ 저장됨'))
+    .catch(e => { console.warn('[Firebase] 실적 저장 실패:', e); showToast('❌ 저장 실패'); });
+}
+
+// 실적 1건 수정 — 해당 키만 갱신, 다른 사람의 레코드는 건드리지 않음
+function updateRecordInFirebase(key, record) {
+  const idx = RECORDS.findIndex(r => r._key === key);
+  if (idx !== -1) RECORDS[idx] = { ...record, _key: key };
+  localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+  if (!fbDB || !key || key.startsWith('local-') || key.startsWith('legacy-')) return;
+  fbDB.ref(FB_REF + '/records/' + key).set(record)
+    .then(() => showToast('✅ 저장됨'))
+    .catch(e => { console.warn('[Firebase] 실적 수정 실패:', e); showToast('❌ 저장 실패'); });
+}
+
+// 실적 1건 삭제 — 해당 키만 제거
+function deleteRecordFromFirebase(key) {
+  RECORDS = RECORDS.filter(r => r._key !== key);
+  localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+  if (!fbDB || !key || key.startsWith('local-') || key.startsWith('legacy-')) return;
+  fbDB.ref(FB_REF + '/records/' + key).remove()
+    .catch(e => console.warn('[Firebase] 실적 삭제 실패:', e));
 }
 
 function _applyLocal() {
@@ -1140,6 +1203,8 @@ function _applyLocal() {
   if (c)  LOSS_CODES = JSON.parse(c);
   if (l)  LINES      = JSON.parse(l);
   if (dr) DRAFTS     = JSON.parse(dr);
+  // 과거(키 없는) 형식으로 저장된 로컬 레코드에 임시 키 부여 (fbDB 연결 시 마이그레이션에서 실제 키로 교체됨)
+  RECORDS = RECORDS.map((r, i) => r._key ? r : { ...r, _key: 'legacy-' + i });
 }
 
 function loadData(callback) {
@@ -1148,7 +1213,7 @@ function loadData(callback) {
     const d = snap.val();
     if (d) {
       if (Array.isArray(d.products))  PRODUCTS   = d.products;
-      if (Array.isArray(d.records))   RECORDS    = d.records;
+      if (d.records)                  RECORDS    = _recordsObjToArray(d.records);
       if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
       if (Array.isArray(d.lines))     LINES      = d.lines;
       if (Array.isArray(d.drafts))    DRAFTS     = d.drafts;
@@ -1156,9 +1221,27 @@ function loadData(callback) {
         _slideActive   = !!d.slideState.active;
         _slideInterval = d.slideState.interval || 10;
       }
+      // 참고: 과거(배열 전체 덮어쓰기) 형식의 records도 _recordsObjToArray()가 그대로 읽어들여
+      // 화면에 정상 표시한다. 자동으로 Firebase 구조를 변환/삭제하는 마이그레이션은 의도적으로
+      // 두지 않는다 — 여러 기기가 동시에 접속한 상태에서 실행되면 데이터가 통째로 사라질 위험이
+      // 있기 때문이다 (실제로 이 문제로 실적 데이터가 유실된 사고가 있었음).
+      // 이후 누군가 실적을 추가/수정/삭제하면 그 건부터 자연스럽게 새 키 구조로 바뀐다.
     } else {
       _applyLocal();
-      if (PRODUCTS.length || RECORDS.length) saveData();
+      if (PRODUCTS.length) saveData();
+      if (RECORDS.length) {
+        // Firebase가 비어있는 최초 상태 — 로컬에 남아있던 레코드를 개별 키로 업로드
+        const recordsRef = fbDB.ref(FB_REF + '/records');
+        const newRecords = [];
+        RECORDS.forEach(rec => {
+          const { _key, ...rest } = rec;
+          const ref = recordsRef.push();
+          ref.set(rest);
+          newRecords.push({ ...rest, _key: ref.key });
+        });
+        RECORDS = newRecords;
+        localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+      }
     }
     callback();
     _applySlideStateUI();
@@ -1176,7 +1259,6 @@ function setupRealtimeSync() {
     const d = snap.val();
     if (!d) return;
     if (Array.isArray(d.products))  PRODUCTS   = d.products;
-    if (Array.isArray(d.records))   RECORDS    = d.records;
     if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
     if (Array.isArray(d.lines))     LINES      = d.lines;
     renderDashboard(); renderHistory(); renderLineStatus();
@@ -1186,6 +1268,45 @@ function setupRealtimeSync() {
     if (_syncReady) showToast('🔄 다른 기기에서 동기화됨');
     _syncReady = true;
   });
+  // records는 전체가 아니라 child 단위(개별 실적 1건)로 감지 — 동시 입력 시 서로의 데이터를 덮어쓰지 않는다
+  let _recordsSyncReady = false;
+  fbDB.ref(FB_REF + '/records').on('child_added', snap => {
+    const key = snap.key;
+    const data = snap.val();
+    if (!data) return;
+    if (RECORDS.some(r => r._key === key)) return; // 이미 로컬에 있음 (내가 막 추가한 경우)
+    RECORDS.push({ ...data, _key: key });
+    localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+    if (_recordsSyncReady) {
+      renderDashboard(); renderHistory(); renderLineStatus();
+      showToast('🔄 다른 기기에서 실적이 추가됨');
+    }
+  });
+  fbDB.ref(FB_REF + '/records').on('child_changed', snap => {
+    const key = snap.key;
+    const data = snap.val();
+    if (!data) return;
+    const idx = RECORDS.findIndex(r => r._key === key);
+    if (idx !== -1) RECORDS[idx] = { ...data, _key: key };
+    else RECORDS.push({ ...data, _key: key });
+    localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+    if (_recordsSyncReady) {
+      renderDashboard(); renderHistory(); renderLineStatus();
+      showToast('🔄 다른 기기에서 실적이 수정됨');
+    }
+  });
+  fbDB.ref(FB_REF + '/records').on('child_removed', snap => {
+    const key = snap.key;
+    RECORDS = RECORDS.filter(r => r._key !== key);
+    localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+    if (_recordsSyncReady) {
+      renderDashboard(); renderHistory(); renderLineStatus();
+      showToast('🔄 다른 기기에서 실적이 삭제됨');
+    }
+  });
+  // 초기 child_added 일괄 수신이 끝난 뒤부터 토스트/재렌더링을 활성화 (최초 로드 시 매 건마다 알림 방지)
+  setTimeout(() => { _recordsSyncReady = true; }, 3000);
+
   fbDB.ref(FB_REF + '/drafts').on('value', snap => {
     if (Date.now() - _lastDraftSave < 5000) return;
     if (!_syncReady) return;
@@ -1241,9 +1362,24 @@ function oeeClass(v) {
 
 function shiftLabel(s) {
   return {
-    dayA:'☀️주A', dayB:'☀️주B', dayC:'☀️주C', day:'☀️주간',
-    nightA:'🌙야A', nightB:'🌙야B', nightC:'🌙야C', night:'🌙야간'
+    dayA:'☀️주간A조', dayB:'☀️주간B조', dayC:'☀️주간C조', day:'☀️주간',
+    nightA:'🌙야간A조', nightB:'🌙야간B조', nightC:'🌙야간C조', night:'🌙야간'
   }[s] || s;
+}
+
+// 같은 날짜 내에서 교대조를 일정한 순서로 보여주기 위한 정렬 가중치 (큰 값이 위쪽에 표시됨)
+function SHIFT_SORT_ORDER(s) {
+  const order = { dayA: 8, dayB: 7, dayC: 6, day: 5, nightA: 4, nightB: 3, nightC: 2, night: 1 };
+  return order[s] ?? 0;
+}
+
+// 실적 목록을 "입력(저장) 순서"가 아니라 "실제 날짜(및 교대조)" 기준 내림차순으로 정렬한다.
+// 과거 날짜를 나중에 추가 입력해도 항상 올바른 위치(해당 날짜)에 정렬되도록 하기 위함.
+function sortRecordsByDateDesc(records) {
+  return [...records].sort((a, b) => {
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    return SHIFT_SORT_ORDER(b.shift) - SHIFT_SORT_ORDER(a.shift);
+  });
 }
 
 function fmt(v) { return (v * 100).toFixed(1) + '%'; }
@@ -1269,26 +1405,32 @@ function onDateInput() {
 }
 
 // ══ 탭 전환 ══
+const PAGE_ORDER = ['lines','dashboard','input','history','products','codes','line-mgmt','analysis'];
+
 function showPage(name, tabEl, bnavId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  if (tabEl) tabEl.classList.add('active');
-  document.querySelectorAll('.bnav-btn').forEach(b => b.classList.remove('active'));
-  if (bnavId) {
-    const idx = ['lines','dashboard','input','history','products','codes','line-mgmt','analysis'].indexOf(bnavId);
-    document.querySelectorAll('.bnav-btn')[idx]?.classList.add('active');
-  }
+
+  const idx = PAGE_ORDER.indexOf(name);
+  document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+  document.querySelectorAll('.bnav-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+
   const rf = document.getElementById('remainFloat');
   if (rf) rf.style.display = name === 'input' ? 'block' : 'none';
   if (name === 'input')     renderDraftList();
-  if (name === 'analysis')  requestAnimationFrame(renderAnalysis);
+  if (name === 'analysis') {
+    const searchEl = document.getElementById('analysisProductSearch');
+    if (searchEl) searchEl.style.display = analysisPeriod === 'product' ? '' : 'none';
+    requestAnimationFrame(renderAnalysis);
+  }
   if (name === 'lines') {
     renderLineStatus();
     if (_slideActive && !_slideTimer) startSlideTimer();
   }
   // 다른 탭으로 이동해도 타이머 유지 - 가동현황 복귀 시 이어받음
   if (name === 'line-mgmt') renderLineMgmt();
+
+  navPushPage(name);
 }
 
 // ══ 토스트 ══
@@ -1397,7 +1539,7 @@ function renderDashboard() {
   } else {
     const todayBase = base.filter(r => r.date === todayStr);
     calc = todayBase.length ? todayBase : base;
-    last = [...base].reverse()[0];
+    last = sortRecordsByDateDesc(base)[0];
   }
 
   const sumQty    = calc.reduce((a, r) => a + r.qty, 0);
@@ -1452,7 +1594,7 @@ function renderDashboard() {
   }
 
   // 최근 5건 (필터 적용)
-  const recent = [...base].reverse().slice(0, 5);
+  const recent = sortRecordsByDateDesc(base).slice(0, 5);
   document.getElementById('recentRecordsTbody').innerHTML = recent.map(r => {
     const realIdx = RECORDS.indexOf(r);
     const oeeVal  = (r.avail * r.perf * r.qual * 100).toFixed(1);
@@ -1491,7 +1633,9 @@ function renderHistory() {
     return;
   }
 
-  const sorted = [...base].reverse();
+  // 날짜(내림차순) 기준으로 정렬 — 입력(저장) 순서가 아니라 실제 실적 날짜 기준으로 묶어야
+  // 나중에 과거 날짜를 추가 입력해도 같은 날짜 그룹으로 합쳐진다.
+  const sorted = sortRecordsByDateDesc(base);
   const rows = [];
   let lastGroupKey = null;
 
@@ -1522,7 +1666,7 @@ function renderHistory() {
     const partCell = `<div style="font-family:'JetBrains Mono',monospace;font-size:11px">${r.partNo}</div>${p ? `<div style="font-size:10px;color:var(--muted)">${p.name}</div>` : ''}`;
     rows.push(`<tr class="hist-row" style="cursor:pointer" onclick="selectHistoryRow(event,${realIdx})">
       <td>${r.date.slice(5)}</td>
-      <td style="font-size:12px">${shiftLabel(r.shift)}</td>
+      <td style="font-size:11px;white-space:nowrap">${shiftLabel(r.shift)}</td>
       <td>${partCell}</td>
       <td>${r.qty.toLocaleString()}</td>
       <td style="${dc}">${r.defect}</td>
@@ -1551,10 +1695,11 @@ let histSummaryCollapsed = localStorage.getItem('mc_hist_summary_collapsed') ===
 function toggleHistSummary() {
   histSummaryCollapsed = !histSummaryCollapsed;
   localStorage.setItem('mc_hist_summary_collapsed', histSummaryCollapsed ? '1' : '0');
-  const body = document.getElementById('histSummaryBody');
-  const btn  = document.getElementById('histSummaryToggle');
-  if (body) body.style.display = histSummaryCollapsed ? 'none' : '';
-  if (btn)  btn.textContent = histSummaryCollapsed ? '▼ 펼치기' : '▲ 접기';
+  const btn = document.getElementById('histSummaryToggle');
+  if (btn) btn.textContent = histSummaryCollapsed ? '▼ 펼치기' : '▲ 접기';
+  // 접힌 상태에서는 내용을 비워둔 채 숨기기만 했으므로, 펼칠 때 항상 다시 그려준다
+  const base = histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter);
+  renderHistorySummary(base);
 }
 
 function renderHistorySummary(base) {
@@ -1615,14 +1760,22 @@ function renderHistorySummary(base) {
       const good = data.qty - data.defect;
       const pct  = totalQty > 0 ? Math.round(data.qty / totalQty * 100) : 0;
       const col  = barColors[i % barColors.length];
+      const goodRate = data.qty > 0 ? (good / data.qty * 100) : 0;
+      const defRate  = data.qty > 0 ? (data.defect / data.qty * 100) : 0;
+      const ppm      = data.qty > 0 ? Math.round(data.defect / data.qty * 1000000) : 0;
       return `
         <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
           <div style="width:3px;height:32px;background:${col};border-radius:2px;flex-shrink:0"></div>
           <div style="flex:1;min-width:0">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:${col}">${partNo}</div>
-            ${p ? `<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>` : ''}
+            <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:${col}">${partNo}</div>
+            ${p ? `<div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>` : ''}
             <div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
               <div style="height:100%;width:${pct}%;background:${col};border-radius:2px"></div>
+            </div>
+            <div style="margin-top:4px;font-size:10px;color:var(--muted);white-space:nowrap">
+              양품 <span style="color:var(--accent3);font-weight:700">${goodRate.toFixed(2)}%</span>
+              · 불량 <span style="color:var(--danger);font-weight:700">${defRate.toFixed(2)}%</span>
+              · PPM <span style="color:var(--warn);font-weight:700">${ppm.toLocaleString()}</span>
             </div>
           </div>
           <div style="flex-shrink:0;text-align:right;min-width:90px">
@@ -1633,9 +1786,13 @@ function renderHistorySummary(base) {
         </div>`;
     }).join('');
 
+    const totalGoodRate = totalQty > 0 ? (totalGood / totalQty * 100) : 0;
+    const totalDefRate  = totalQty > 0 ? (totalDef / totalQty * 100) : 0;
+    const totalPpm      = totalQty > 0 ? Math.round(totalDef / totalQty * 1000000) : 0;
+
     return `
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <div style="font-size:13px;font-weight:700;color:var(--accent)">📅 ${label}</div>
           <div style="display:flex;gap:14px;flex-shrink:0">
             <div style="text-align:right">
@@ -1651,6 +1808,11 @@ function renderHistorySummary(base) {
               <div style="font-size:10px;color:var(--muted)">총 불량</div>
             </div>
           </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;font-size:11px;color:var(--muted);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+          <span>양품률 <b style="color:var(--accent3)">${totalGoodRate.toFixed(2)}%</b></span>
+          <span>불량률 <b style="color:var(--danger)">${totalDefRate.toFixed(2)}%</b></span>
+          <span>PPM <b style="color:var(--warn)">${totalPpm.toLocaleString()}</b></span>
         </div>
         ${rows}
       </div>`;
@@ -1969,7 +2131,7 @@ function saveRecord() {
     document.getElementById('timeWarnUsed').textContent = `합계 ${totalUsed}분 / 720분`;
     document.getElementById('timeWarnUsed').style.color = diff > 0 ? 'var(--danger)' : 'var(--accent)';
     document.getElementById('timeWarnMsg').textContent  = diff > 0 ? `▲ ${diff}분 초과 — 시간을 줄여주세요` : `▼ ${-diff}분 부족 — 시간을 추가해주세요`;
-    document.getElementById('timeWarnModal').style.display = 'flex';
+    openTimeWarnModal();
     return;
   }
 
@@ -1978,15 +2140,15 @@ function saveRecord() {
   const perf  = Math.min((qty * ct / 60) / runMin, 1);
   const qual  = qty > 0 ? good / qty : 0;
 
-  RECORDS.push({ date, shift, partNo, qty, defect, good, runMin, ct, avail, perf, qual, lossCodes, inputBy });
+  addRecordToFirebase({ date, shift, partNo, qty, defect, good, runMin, ct, avail, perf, qual, lossCodes, inputBy });
 
   // 임시저장에서 불러온 데이터로 저장 시 해당 임시저장 자동 삭제
   if (loadedDraftId) {
     DRAFTS = DRAFTS.filter(d => d.id !== loadedDraftId);
     loadedDraftId = null;
+    saveDraftsStorage();
   }
 
-  saveData();
   showToast('💾 실적이 저장되었습니다!');
   resetInputForm();
   renderDashboard();
@@ -2089,9 +2251,11 @@ function openRecordEditModal(idx) {
   }).join('');
   calcEditOEE();
   document.getElementById('recordEditModal').style.display = 'flex';
+  navPushModal('recordEditModal');
 }
 
 function closeRecordEditModal() {
+  navCloseModal();
   document.getElementById('recordEditModal').style.display = 'none';
 }
 
@@ -2151,7 +2315,7 @@ function saveRecordEdit() {
     document.getElementById('timeWarnUsed').textContent = `합계 ${totalUsed}분 / 720분`;
     document.getElementById('timeWarnUsed').style.color = diff > 0 ? 'var(--danger)' : 'var(--accent)';
     document.getElementById('timeWarnMsg').textContent  = diff > 0 ? `▲ ${diff}분 초과 — 시간을 줄여주세요` : `▼ ${-diff}분 부족 — 시간을 추가해주세요`;
-    document.getElementById('timeWarnModal').style.display = 'flex';
+    openTimeWarnModal();
     return;
   }
 
@@ -2159,8 +2323,9 @@ function saveRecordEdit() {
   const avail = Math.min(runMin / plannedOpMin, 1);
   const perf  = ct ? Math.min((qty * ct / 60) / runMin, 1) : r.perf;
   const qual  = qty > 0 ? good / qty : 0;
-  RECORDS[idx] = { ...r, date: document.getElementById('editDate').value, shift: document.getElementById('editShift').value, qty, defect, good, runMin, avail, perf, qual, lossCodes, inputBy };
-  saveData();
+  const { _key, ...rBase } = r;
+  const updated = { ...rBase, date: document.getElementById('editDate').value, shift: document.getElementById('editShift').value, qty, defect, good, runMin, avail, perf, qual, lossCodes, inputBy };
+  updateRecordInFirebase(_key, updated);
   showToast('✏️ 실적이 수정되었습니다!');
   closeRecordEditModal();
   renderDashboard();
@@ -2175,6 +2340,7 @@ let deleteTargetIdx = null;
 let recordDeleteIdx = null;
 
 function closeDeleteModal() {
+  navCloseModal();
   document.getElementById('deleteModal').style.display = 'none';
   deleteTargetIdx = null;
   recordDeleteIdx = null;
@@ -2187,6 +2353,7 @@ function openDeleteModal(idx) {
   document.getElementById('deleteModalTitle').textContent  = '🏷️ 품번 삭제';
   document.getElementById('deleteTargetName').textContent  = `${p.emoji} ${p.no} · ${p.name}`;
   document.getElementById('deleteModal').style.display     = 'flex';
+  navPushModal('deleteModal');
 }
 
 function openCodeDeleteModal(idx) {
@@ -2196,6 +2363,7 @@ function openCodeDeleteModal(idx) {
   document.getElementById('deleteModalTitle').textContent  = '🔢 코드 삭제';
   document.getElementById('deleteTargetName').textContent  = `${c.emoji} ${c.code} · ${c.name}`;
   document.getElementById('deleteModal').style.display     = 'flex';
+  navPushModal('deleteModal');
 }
 
 function openRecordDeleteModal(idx) {
@@ -2208,6 +2376,7 @@ function openRecordDeleteModal(idx) {
     `📅 ${r.date} &nbsp;${shiftLabel(r.shift)}<br>` +
     `<span style="font-family:'JetBrains Mono',monospace">${r.partNo}</span> · 생산 ${r.qty.toLocaleString()}ea · OEE ${oeeVal}%`;
   document.getElementById('deleteModal').style.display = 'flex';
+  navPushModal('deleteModal');
 }
 
 function confirmDelete() {
@@ -2225,8 +2394,9 @@ function confirmDelete() {
     closeDeleteModal(); renderCodeList(); renderCodeTable();
   } else if (deleteMode === 'record') {
     if (recordDeleteIdx === null) return;
-    const removed = RECORDS.splice(recordDeleteIdx, 1)[0];
-    saveData();
+    const removed = RECORDS[recordDeleteIdx];
+    if (!removed) return;
+    deleteRecordFromFirebase(removed._key);
     showToast(`🗑️ ${removed.date} ${shiftLabel(removed.shift)} 실적 삭제됨`);
     closeDeleteModal(); renderDashboard(); renderHistory();
   } else if (deleteMode === 'line') {
@@ -2261,23 +2431,34 @@ let _lastSlideSave = 0;
 
 const SLIDE_STATUS_ORDER = { running: 0, stopped: 1, idle: 2, waiting: 3 };
 
-function getSortedLinesForSlide() {
-  const lastRecDate = line => {
-    const rec = [...RECORDS].reverse().find(r => (line.partNos || []).includes(r.partNo));
-    return rec ? rec.date : '';
-  };
+function lastRecDateForLine(line) {
+  const lineRecs = RECORDS.filter(r => (line.partNos || []).includes(r.partNo));
+  const rec = sortRecordsByDateDesc(lineRecs)[0];
+  return rec ? rec.date : '';
+}
+
+// 전체 라인 정렬 (자동전환 OFF일 때 그리드 표시용) — 상태순 → 최신실적순
+function getAllSortedLines() {
   return LINES
     .map((line, idx) => ({ line, idx }))
     .sort((a, b) => {
       const sa = SLIDE_STATUS_ORDER[a.line.status || 'idle'] ?? 2;
       const sb = SLIDE_STATUS_ORDER[b.line.status || 'idle'] ?? 2;
       if (sa !== sb) return sa - sb;
-      return lastRecDate(b.line).localeCompare(lastRecDate(a.line));
+      return lastRecDateForLine(b.line).localeCompare(lastRecDateForLine(a.line));
     });
 }
 
+// 가동중 라인만 (자동전환 슬라이드 대상) — 최신실적순
+function getSortedLinesForSlide() {
+  return LINES
+    .map((line, idx) => ({ line, idx }))
+    .filter(({ line }) => (line.status || 'idle') === 'running')
+    .sort((a, b) => lastRecDateForLine(b.line).localeCompare(lastRecDateForLine(a.line)));
+}
+
 function slideTotalPages() {
-  return Math.max(1, LINES.length);
+  return Math.max(1, getSortedLinesForSlide().length);
 }
 
 function updateSlideDots() {
@@ -2330,20 +2511,25 @@ function renderSlicedLineStatus() {
   }
   if (empty) empty.style.display = 'none';
 
-  const sorted = getSortedLinesForSlide();
   if (_slideActive) {
-    _slidePage = Math.min(_slidePage, sorted.length - 1);
-    const { line, idx } = sorted[_slidePage];
-    if (grid) grid.innerHTML = buildLineCard(line, idx, true);
+    const sorted = getSortedLinesForSlide();
+    if (!sorted.length) {
+      if (grid) grid.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">🟢 현재 가동중인 라인이 없습니다</div>`;
+    } else {
+      _slidePage = Math.min(_slidePage, sorted.length - 1);
+      const { line, idx } = sorted[_slidePage];
+      if (grid) grid.innerHTML = buildLineCard(line, idx, true);
+    }
   } else {
-    if (grid) grid.innerHTML = sorted.map(({ line, idx }) => buildLineCard(line, idx, false)).join('');
+    const allSorted = getAllSortedLines();
+    if (grid) grid.innerHTML = allSorted.map(({ line, idx }) => buildLineCard(line, idx, false)).join('');
   }
   updateSlideDots();
 }
 
 function buildLineCard(line, idx, solo = false) {
   const cfg      = LINE_STATUS_CFG[line.status || 'idle'];
-  const lineRecs = [...RECORDS].reverse().filter(r => (line.partNos || []).includes(r.partNo));
+  const lineRecs = sortRecordsByDateDesc(RECORDS.filter(r => (line.partNos || []).includes(r.partNo)));
   const lastRec  = lineRecs[0];
   const chips    = (line.partNos || []).map(no => {
     const p = PRODUCTS.find(x => x.no === no);
@@ -2607,6 +2793,7 @@ function openLineModal(idx) {
     }).join('');
   }
   document.getElementById('lineModal').style.display = 'flex';
+  navPushModal('lineModal');
 }
 
 function toggleLinePartChk(el) {
@@ -2616,6 +2803,7 @@ function toggleLinePartChk(el) {
 }
 
 function closeLineModal() {
+  navCloseModal();
   document.getElementById('lineModal').style.display = 'none';
 }
 
@@ -2643,6 +2831,7 @@ function openLineDeleteModal(idx) {
   document.getElementById('deleteModalTitle').textContent = '🏭 라인 삭제';
   document.getElementById('deleteTargetName').textContent = LINES[idx].name;
   document.getElementById('deleteModal').style.display = 'flex';
+  navPushModal('deleteModal');
 }
 
 // ══════════════════════════════
@@ -2683,9 +2872,13 @@ function openProductModal(idx) {
     document.querySelectorAll('#productEmojiPicker .emoji-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
   });
+  navPushModal('productModal');
 }
 
-function closeProductModal() { document.getElementById('productModal').style.display = 'none'; }
+function closeProductModal() {
+  navCloseModal();
+  document.getElementById('productModal').style.display = 'none';
+}
 
 function saveProduct() {
   const no   = document.getElementById('modalPartNo').value.trim();
@@ -2699,7 +2892,16 @@ function saveProduct() {
     const oldNo = PRODUCTS[+idx].no;
     if (no !== oldNo && PRODUCTS.find((p, i) => p.no === no && i !== +idx)) { showToast('⚠️ 이미 등록된 품번'); return; }
     PRODUCTS[+idx] = { no, name, ct, emoji: selectedProductEmoji };
-    if (no !== oldNo) RECORDS.forEach(r => { if (r.partNo === oldNo) r.partNo = no; });
+    if (no !== oldNo) {
+      RECORDS.forEach(r => {
+        if (r.partNo === oldNo) {
+          const { _key, ...rest } = r;
+          const updated = { ...rest, partNo: no };
+          r.partNo = no; // 로컬 즉시 반영
+          updateRecordInFirebase(_key, updated);
+        }
+      });
+    }
     saveData();
     showToast(`✏️ ${no} 수정 완료!`);
   } else {
@@ -2756,7 +2958,7 @@ function exportData() {
     version:    1,
     exportedAt: new Date().toISOString(),
     products:   PRODUCTS,
-    records:    RECORDS,
+    records:    RECORDS.map(r => { const { _key, ...rest } = r; return rest; }),
     lossCodes:  LOSS_CODES
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2777,13 +2979,38 @@ function importData(e) {
     try {
       const d = JSON.parse(ev.target.result);
       if (Array.isArray(d.products))  PRODUCTS   = d.products;
-      if (Array.isArray(d.records))   RECORDS    = d.records;
       if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
-      saveData();
-      renderDashboard(); renderHistory();
+      saveData(); // products/lossCodes만 즉시 저장 (records는 아래에서 개별 push로 처리)
+
+      if (Array.isArray(d.records)) {
+        // 가져온 실적은 기존 Firebase records를 모두 비우고, 각 건을 개별 키로 다시 push한다.
+        // (전체 배열을 한 번에 덮어쓰지 않아, import 도중 다른 기기의 동시 입력과 충돌하지 않음)
+        const recordsRef = fbDB ? fbDB.ref(FB_REF + '/records') : null;
+        const plainRecords = d.records.map(r => { const { _key, ...rest } = r; return rest; });
+        if (recordsRef) {
+          recordsRef.set(null).then(() => {
+            const newRecords = [];
+            plainRecords.forEach(rec => {
+              const ref = recordsRef.push();
+              ref.set(rec);
+              newRecords.push({ ...rec, _key: ref.key });
+            });
+            RECORDS = newRecords;
+            localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+            renderDashboard(); renderHistory();
+            showToast('📥 가져오기 완료! (' + PRODUCTS.length + '개 품번 / ' + RECORDS.length + '건 실적)');
+          });
+        } else {
+          RECORDS = plainRecords.map((r, i) => ({ ...r, _key: 'local-' + Date.now() + '-' + i }));
+          localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+        }
+      }
+
       renderProductList(); renderCodeList(); renderCodeTable();
       syncProductSelect();
-      showToast('📥 가져오기 완료! (' + PRODUCTS.length + '개 품번 / ' + RECORDS.length + '건 실적)');
+      if (!Array.isArray(d.records)) {
+        showToast('📥 가져오기 완료! (' + PRODUCTS.length + '개 품번 / ' + RECORDS.length + '건 실적)');
+      }
     } catch {
       showToast('⚠️ 파일 형식 오류 — mc-data-*.json 파일만 가능합니다');
     }
@@ -2854,9 +3081,13 @@ function openCodeModal(idx) {
     document.querySelectorAll('#codeEmojiPicker .emoji-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
   });
+  navPushModal('codeModal');
 }
 
-function closeCodeModal() { document.getElementById('codeModal').style.display = 'none'; }
+function closeCodeModal() {
+  navCloseModal();
+  document.getElementById('codeModal').style.display = 'none';
+}
 
 function saveCode() {
   const code = document.getElementById('codeModalCode').value.trim();
@@ -2871,7 +3102,17 @@ function saveCode() {
     const oldCode = LOSS_CODES[+idx].code;
     if (code !== oldCode && LOSS_CODES.find((c, i) => c.code === code && i !== +idx)) { showToast('⚠️ 이미 등록된 코드'); return; }
     LOSS_CODES[+idx] = { ...LOSS_CODES[+idx], code, name, type, color, emoji: selectedCodeEmoji };
-    if (code !== oldCode) RECORDS.forEach(r => (r.lossCodes || []).forEach(lc => { if (lc.code === oldCode) lc.code = code; }));
+    if (code !== oldCode) {
+      RECORDS.forEach(r => {
+        const hit = (r.lossCodes || []).some(lc => lc.code === oldCode);
+        if (!hit) return;
+        const { _key, ...rest } = r;
+        const newLossCodes = (rest.lossCodes || []).map(lc => lc.code === oldCode ? { ...lc, code } : lc);
+        const updated = { ...rest, lossCodes: newLossCodes };
+        r.lossCodes = newLossCodes; // 로컬 즉시 반영
+        updateRecordInFirebase(_key, updated);
+      });
+    }
     saveData();
     showToast(`✏️ ${code} 수정 완료!`);
   } else {
@@ -3088,6 +3329,11 @@ function setAnalysisPeriod(p, btn) {
   analysisPeriod = p;
   document.querySelectorAll('#analysisPeriodToggle .period-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  const searchEl = document.getElementById('analysisProductSearch');
+  if (searchEl) {
+    searchEl.style.display = p === 'product' ? '' : 'none';
+    if (p !== 'product') searchEl.value = '';
+  }
   renderAnalysis();
 }
 
@@ -3123,15 +3369,39 @@ function calcGroup(recs) {
   const perf   = recs.reduce((a,r) => a + r.perf,  0) / recs.length * 100;
   const qual   = recs.reduce((a,r) => a + r.qual,  0) / recs.length * 100;
   const oee    = avail * perf * qual / 10000;
-  return { qty, defect, avail, perf, qual, oee, count: recs.length };
+  const good     = qty - defect;
+  const goodRate = qty > 0 ? (good / qty * 100) : 0;
+  const defRate  = qty > 0 ? (defect / qty * 100) : 0;
+  const ppm      = qty > 0 ? Math.round(defect / qty * 1000000) : 0;
+  return { qty, defect, avail, perf, qual, oee, count: recs.length, good, goodRate, defRate, ppm };
 }
 
-function renderAnalysisChart(items) {
+// ── 분석 차트 콜렙시블 ──
+let analysisChartCollapsed = localStorage.getItem('mc_analysis_chart_collapsed') === '1';
+let _lastChartItems = [];
+let _lastChartEmptyMsg = '데이터 없음';
+
+function toggleAnalysisChart() {
+  analysisChartCollapsed = !analysisChartCollapsed;
+  localStorage.setItem('mc_analysis_chart_collapsed', analysisChartCollapsed ? '1' : '0');
+  const btn = document.getElementById('analysisChartToggle');
+  if (btn) btn.textContent = analysisChartCollapsed ? '▼ 펼치기' : '▲ 접기';
+  // 접힌 상태에서는 내용을 비워둔 채 숨기기만 했으므로, 펼칠 때 항상 다시 그려준다
+  renderAnalysisChart(_lastChartItems, _lastChartEmptyMsg);
+}
+
+function renderAnalysisChart(items, emptyMsg) {
+  _lastChartItems = items;
+  _lastChartEmptyMsg = emptyMsg || '데이터 없음';
   const el = document.getElementById('analysisChart');
-  if (!items.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">데이터 없음</div>'; return; }
+  const btn = document.getElementById('analysisChartToggle');
+  if (btn) btn.textContent = analysisChartCollapsed ? '▼ 펼치기' : '▲ 접기';
+  if (analysisChartCollapsed) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  if (!items.length) { el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted)">${_lastChartEmptyMsg}</div>`; return; }
   const mobile = window.innerWidth < 500;
-  const barH = mobile ? 26 : 30, gap = mobile ? 6 : 8;
-  const labelW = mobile ? 76 : 160, rightPad = 52;
+  const barH = mobile ? 30 : 34, gap = mobile ? 7 : 9;
+  const labelW = mobile ? 84 : 168, rightPad = 58;
   const W = Math.max(260, el.clientWidth || (window.innerWidth - 56));
   const chartW = Math.max(60, W - labelW - rightPad);
   const H = items.length * (barH + gap) + 16;
@@ -3144,10 +3414,10 @@ function renderAnalysisChart(items) {
     const safeKey = d.key.replace(/'/g, "\\'");
     return `<g onclick="showAnalysisDrilldown('${safeKey}')" style="cursor:pointer">
         <rect x="0" y="${y}" width="${W}" height="${barH}" fill="transparent"/>
-        <text x="${labelW-5}" y="${y+barH/2+4}" text-anchor="end" fill="var(--muted)" font-size="${mobile?9:11}" font-family="'JetBrains Mono',monospace">${lbl}</text>
+        <text x="${labelW-5}" y="${y+barH/2+4}" text-anchor="end" fill="var(--muted)" font-size="${mobile?11:14}" font-weight="600" font-family="'JetBrains Mono',monospace">${lbl}</text>
         <rect x="${labelW}" y="${y}" width="${chartW}" height="${barH}" rx="4" fill="var(--border)"/>
         <rect x="${labelW}" y="${y}" width="${w}" height="${barH}" rx="4" fill="${col}" opacity="0.9"/>
-        <text x="${labelW+w+4}" y="${y+barH/2+4}" fill="${col}" font-size="${mobile?10:12}" font-weight="700" font-family="'JetBrains Mono',monospace">${d.oee.toFixed(1)}%</text>
+        <text x="${labelW+w+4}" y="${y+barH/2+4}" fill="${col}" font-size="${mobile?12:15}" font-weight="700" font-family="'JetBrains Mono',monospace">${d.oee.toFixed(1)}%</text>
       </g>`;
   }).join('');
   el.innerHTML = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;touch-action:pan-y">${bars}</svg></div>`;
@@ -3170,8 +3440,8 @@ function renderAnalysis() {
   `;
 
   if (!RECORDS.length) {
-    document.getElementById('analysisChart').innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">📭 저장된 실적이 없습니다</div>';
-    document.getElementById('analysisTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">📭 데이터 없음</td></tr>';
+    renderAnalysisChart([], '📭 저장된 실적이 없습니다');
+    document.getElementById('analysisTableBody').innerHTML = '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--muted)">📭 데이터 없음</td></tr>';
     return;
   }
 
@@ -3180,11 +3450,43 @@ function renderAnalysis() {
   document.getElementById('analysisChartTitle').textContent = '📊 ' + titleMap[analysisPeriod];
 
   const grouped = groupRecords(analysisPeriod);
-  const keys = Object.keys(grouped).sort().reverse();   // 내림차순 (최신이 맨 위)
+  let keys = Object.keys(grouped).sort().reverse();   // 내림차순 (최신이 맨 위)
 
-  // 차트 데이터 (내림차순)
+  // 품번별 검색 필터 (품번 또는 품명)
+  if (isProduct) {
+    const searchEl = document.getElementById('analysisProductSearch');
+    const q = (searchEl?.value || '').trim().toLowerCase();
+    if (q) {
+      keys = keys.filter(k => {
+        const p = PRODUCTS.find(x => x.no === k);
+        return k.toLowerCase().includes(q) || (p?.name || '').toLowerCase().includes(q);
+      });
+    }
+  }
+
+  if (isProduct && !keys.length) {
+    renderAnalysisChart([], '🔍 검색 결과가 없습니다');
+    document.getElementById('analysisTableBody').innerHTML = '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--muted)">🔍 검색 결과가 없습니다</td></tr>';
+    return;
+  }
+
+  // 각 키별 집계는 한 번만 계산해서 정렬/차트/테이블에 재사용
+  const groupCalc = {};
+  keys.forEach(k => { groupCalc[k] = calcGroup(grouped[k]); });
+
+  // 정렬 기준 적용
+  const sortMode = document.getElementById('analysisSortSelect')?.value || 'default';
+  if (sortMode === 'oee_desc')      keys.sort((a,b) => groupCalc[b].oee - groupCalc[a].oee);
+  else if (sortMode === 'oee_asc')      keys.sort((a,b) => groupCalc[a].oee - groupCalc[b].oee);
+  else if (sortMode === 'defrate_desc') keys.sort((a,b) => groupCalc[b].defRate - groupCalc[a].defRate);
+  else if (sortMode === 'defrate_asc')  keys.sort((a,b) => groupCalc[a].defRate - groupCalc[b].defRate);
+  else if (sortMode === 'qty_desc')     keys.sort((a,b) => groupCalc[b].qty - groupCalc[a].qty);
+  else if (sortMode === 'qty_asc')      keys.sort((a,b) => groupCalc[a].qty - groupCalc[b].qty);
+  // 'default'는 위에서 이미 최신순으로 정렬되어 있으므로 그대로 둠
+
+  // 차트 데이터
   const chartItems = keys.map(k => {
-    const g = calcGroup(grouped[k]);
+    const g = groupCalc[k];
     const label = isProduct ? (PRODUCTS.find(p=>p.no===k)?.emoji||'') + ' ' + k : k;
     return { key: k, label, oee: g.oee };
   });
@@ -3193,20 +3495,29 @@ function renderAnalysis() {
   // 테이블 헤더
   const headLabel = isProduct ? '품번' : (analysisPeriod==='week'?'주차':analysisPeriod==='month'?'월':'연도');
   document.getElementById('analysisTableHead').innerHTML = `<tr>
-    <th>${headLabel}</th><th>건수</th><th>생산</th><th>불량</th>
+    <th>${headLabel}</th>${isProduct ? '<th>품명</th>' : ''}<th>건수</th><th>생산</th><th>불량</th>
+    ${isProduct ? '<th>양품률</th><th>불량률</th><th>PPM</th>' : ''}
     <th>⏱️가용</th><th>⚡성능</th><th>✅품질</th><th>🏆OEE</th>
   </tr>`;
 
   // 테이블 바디
   document.getElementById('analysisTableBody').innerHTML = keys.map(k => {
-    const g = calcGroup(grouped[k]);
-    const label = isProduct ? ((PRODUCTS.find(p=>p.no===k)?.emoji||'')+ ' '+k) : k;
+    const g = groupCalc[k];
+    const p = isProduct ? PRODUCTS.find(x => x.no === k) : null;
+    const label = isProduct ? ((p?.emoji||'')+ ' '+k) : k;
+    const nameCell = isProduct ? `<td style="font-size:12px;color:var(--muted);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">${p?.name || '-'}</td>` : '';
+    const qualityCells = isProduct ? `
+      <td style="color:var(--accent3)">${g.goodRate.toFixed(2)}%</td>
+      <td style="color:var(--danger)">${g.defRate.toFixed(2)}%</td>
+      <td style="color:var(--warn)">${g.ppm.toLocaleString()}</td>` : '';
     const oc = g.oee>=85?'badge-ok':g.oee>=70?'badge-warn':'badge-bad';
     return `<tr class="hist-row" data-key="${k}" onclick="showAnalysisDrilldown('${k}')" style="cursor:pointer">
       <td style="font-family:'JetBrains Mono',monospace;font-size:12px;white-space:nowrap">${label}</td>
+      ${nameCell}
       <td>${g.count}</td>
       <td>${g.qty.toLocaleString()}</td>
       <td style="color:var(--danger)">${g.defect}</td>
+      ${qualityCells}
       <td>${g.avail.toFixed(1)}%</td>
       <td>${g.perf.toFixed(1)}%</td>
       <td>${g.qual.toFixed(1)}%</td>
@@ -3342,7 +3653,8 @@ function showAnalysisDrilldown(key, keepOpen) {
   }).join('') : `<div style="text-align:center;padding:16px;color:var(--muted)">손실코드 데이터 없음</div>`;
 
   const isProduct = analysisPeriod === 'product';
-  const keyLabel = isProduct ? ((PRODUCTS.find(p=>p.no===key)?.emoji||'')+' '+key) : key;
+  const drillProduct = isProduct ? PRODUCTS.find(p=>p.no===key) : null;
+  const keyLabel = isProduct ? ((drillProduct?.emoji||'')+' '+key + (drillProduct?.name ? ` · ${drillProduct.name}` : '')) : key;
   const cmpLabel = hasPrev ? `vs ${prevKey}` : '이전 데이터 없음';
 
   panel.style.display = 'block';
@@ -3480,6 +3792,79 @@ function scheduleLineStatusReset() {
   }, msUntil);
 }
 
+// ══════════════════════════════════════
+//  모바일 뒤로가기(시스템 Back) 단계적 이동
+//  - 탭 전환: history에 한 단계씩 쌓아서, 뒤로가기 시 이전 탭으로 복귀
+//  - 모달: 열릴 때 한 단계 쌓고, 뒤로가기 시 모달만 닫힘 (탭 유지)
+//  - 최초 진입 탭에서 뒤로가기 시에는 쌓인 게 없어 브라우저/앱이 기본 동작(종료) 수행
+// ══════════════════════════════════════
+let _navIgnorePop = false;     // 코드에서 직접 history.back()을 호출했을 때 popstate 중복 처리 방지
+let _navCurrentPage = 'lines'; // 현재 활성 탭 (popstate 복원용)
+const ALL_MODAL_IDS = ['productModal','codeModal','recordEditModal','lineModal','deleteModal','timeWarnModal'];
+
+function navGetOpenModalId() {
+  for (const id of ALL_MODAL_IDS) {
+    const el = document.getElementById(id);
+    if (el && el.style.display === 'flex') return id;
+  }
+  return null;
+}
+
+// 탭 전환 시 호출 (showPage 내부에서 사용)
+function navPushPage(name) {
+  if (_navIgnorePop) { _navIgnorePop = false; _navCurrentPage = name; return; }
+  if (name === _navCurrentPage && history.state && history.state.type === 'page') return;
+  _navCurrentPage = name;
+  history.pushState({ type: 'page', name }, '', '');
+}
+
+// 모달이 열릴 때 호출
+function navPushModal(modalId) {
+  if (_navIgnorePop) { _navIgnorePop = false; return; }
+  history.pushState({ type: 'modal', modalId, page: _navCurrentPage }, '', '');
+}
+
+// 모달을 코드(취소/저장/✕ 버튼 등)로 닫을 때 호출 — 쌓아둔 history 한 단계를 정리
+function navCloseModal() {
+  if (history.state && history.state.type === 'modal') {
+    _navIgnorePop = true;
+    history.back();
+  }
+}
+
+function openTimeWarnModal() {
+  document.getElementById('timeWarnModal').style.display = 'flex';
+  navPushModal('timeWarnModal');
+}
+
+function closeTimeWarnModal() {
+  navCloseModal();
+  document.getElementById('timeWarnModal').style.display = 'none';
+}
+
+window.addEventListener('popstate', () => {
+  // 코드에서 직접 호출한 history.back()으로 발생한 popstate는 무시 (모달은 호출 시점에 이미 닫혀있음)
+  if (_navIgnorePop) { _navIgnorePop = false; return; }
+
+  // 1) 열려있는 모달이 있으면 모달만 닫고 탭은 유지 (시스템 뒤로가기로 모달 닫기)
+  const openModalId = navGetOpenModalId();
+  if (openModalId) {
+    const el = document.getElementById(openModalId);
+    if (el) el.style.display = 'none';
+    return;
+  }
+  // 2) 모달이 없으면 이전 탭으로 복귀
+  const st = history.state;
+  if (st && st.type === 'page' && st.name) {
+    _navIgnorePop = true; // showPage 내부의 navPushPage가 중복으로 pushState하지 않도록
+    showPage(st.name);
+  }
+  // st가 없으면(스택 최하단) 그대로 둬서 시스템 기본 동작(앱 종료 등)에 맡김
+});
+
+// 최초 진입 상태를 history에 기록해 popstate 기준점을 만든다
+history.replaceState({ type: 'page', name: 'lines' }, '', '');
+
 // ══ INIT ══
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme(localStorage.getItem('mc_theme') || 'dark');
@@ -3510,10 +3895,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ══ 업데이트 내용 (버전 올릴 때마다 수정) ══
 const UPDATE_NOTES = [
-  '임시저장 삭제해도 다시 나타나는 버그 수정',
-  '임시저장 독립 Firebase 경로 분리 — 다른 기기 저장 시 덮어쓰기 방지',
-  '분석 탭 모바일 차트 잘림 및 세로 스크롤 먹통 현상 해결',
-  '업데이트 알림 배너 추가 — 업데이트 내용 확인 후 새로고침',
+  '실적 데이터 저장 방식 개선 — 여러 사람이 동시에 입력해도 데이터가 사라지지 않도록 구조 변경',
+  '이력 조회 탭 — 과거 날짜를 나중에 입력해도 같은 날짜로 올바르게 묶이도록 정렬 방식 수정',
+  '대시보드/가동현황 — "최근 실적" 표시를 입력 순서가 아닌 실제 날짜 기준으로 수정',
+  '가동현황 자동 전환 — 가동중인 라인만 슬라이드 대상으로 적용',
+  '분석 탭 — 품번별 검색, 정렬(OEE/불량률/생산량 높은순·낮은순), 양품률·불량률·PPM 표시 추가',
+  '모바일 뒤로가기 — 탭/모달 단계적 이동 지원 (앱이 바로 종료되지 않도록)',
+  '교대조 표기를 "주A" → "주간A조" 형태로 변경, 모델별 생산량 합계 폰트 확대',
 ];
 
 // ══ Service Worker 등록 ══

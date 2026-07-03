@@ -1752,9 +1752,10 @@ function renderHistorySummary(base) {
     }
     if (!periodMap[groupKey]) periodMap[groupKey] = { label: groupLabel, models: {} };
     const m = periodMap[groupKey].models;
-    if (!m[r.partNo]) m[r.partNo] = { qty: 0, defect: 0 };
+    if (!m[r.partNo]) m[r.partNo] = { qty: 0, defect: 0, workers: new Set() };
     m[r.partNo].qty    += (r.qty    || 0);
     m[r.partNo].defect += (r.defect || 0);
+    if (r.inputBy) m[r.partNo].workers.add(r.inputBy);
   });
 
   const sorted = Object.entries(periodMap).sort((a, b) => b[0].localeCompare(a[0]));
@@ -1774,6 +1775,7 @@ function renderHistorySummary(base) {
       const goodRate = data.qty > 0 ? (good / data.qty * 100) : 0;
       const defRate  = data.qty > 0 ? (data.defect / data.qty * 100) : 0;
       const ppm      = data.qty > 0 ? Math.round(data.defect / data.qty * 1000000) : 0;
+      const workers  = Array.from(data.workers || []);
       return `
         <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
           <div style="width:3px;height:32px;background:${col};border-radius:2px;flex-shrink:0"></div>
@@ -1788,6 +1790,7 @@ function renderHistorySummary(base) {
               · 불량 <span style="color:var(--danger);font-weight:700">${defRate.toFixed(2)}%</span>
               · PPM <span style="color:var(--warn);font-weight:700">${ppm.toLocaleString()}</span>
             </div>
+            ${workers.length ? `<div style="margin-top:3px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">👤 ${workers.join(', ')}</div>` : ''}
           </div>
           <div style="flex-shrink:0;text-align:right;min-width:90px">
             <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--text)">${data.qty.toLocaleString()}</div>
@@ -3573,7 +3576,19 @@ function renderAnalysis() {
   });
   renderAnalysisChart(chartItems);
 
-  // 테이블 헤더
+  renderAnalysisTable(keys, groupCalc, isProduct);
+
+  // 선택 유지 (드릴다운 패널 내용만 갱신 — 테이블 축소 여부는 renderAnalysisTable에서 처리)
+  if (_selectedAnalysisKey && grouped[_selectedAnalysisKey]) {
+    renderDrilldownPanel(_selectedAnalysisKey);
+  } else {
+    _selectedAnalysisKey = null;
+    document.getElementById('analysisDrilldown').style.display = 'none';
+  }
+}
+
+// ── 분석 테이블 (품번/기간 선택 시 해당 항목만 패널 형태로 축소 표시) ──
+function renderAnalysisTable(keys, groupCalc, isProduct) {
   const headLabel = isProduct ? '품번' : (analysisPeriod==='week'?'주차':analysisPeriod==='month'?'월':'연도');
   document.getElementById('analysisTableHead').innerHTML = `<tr>
     <th>${headLabel}</th>${isProduct ? '<th>품명</th>' : ''}<th>건수</th><th>생산</th><th>불량</th>
@@ -3581,8 +3596,9 @@ function renderAnalysis() {
     <th>⏱️가용</th><th>⚡성능</th><th>✅품질</th><th>🏆OEE</th>
   </tr>`;
 
-  // 테이블 바디
-  document.getElementById('analysisTableBody').innerHTML = keys.map(k => {
+  const colCount = isProduct ? 12 : 8;
+
+  const buildRow = (k) => {
     const g = groupCalc[k];
     const p = isProduct ? PRODUCTS.find(x => x.no === k) : null;
     const label = isProduct ? ((p?.emoji||'')+ ' '+k) : k;
@@ -3592,7 +3608,7 @@ function renderAnalysis() {
       <td style="color:var(--danger)">${g.defRate.toFixed(2)}%</td>
       <td style="color:var(--warn)">${g.ppm.toLocaleString()}</td>` : '';
     const oc = g.oee>=85?'badge-ok':g.oee>=70?'badge-warn':'badge-bad';
-    return `<tr class="hist-row" data-key="${k}" onclick="showAnalysisDrilldown('${k}')" style="cursor:pointer">
+    return `<tr class="hist-row${k===_selectedAnalysisKey?' hist-selected':''}" data-key="${k}" onclick="showAnalysisDrilldown('${k}')" style="cursor:pointer">
       <td style="font-family:'JetBrains Mono',monospace;font-size:12px;white-space:nowrap">${label}</td>
       ${nameCell}
       <td>${g.count}</td>
@@ -3604,15 +3620,21 @@ function renderAnalysis() {
       <td>${g.qual.toFixed(1)}%</td>
       <td class="${oc}">${g.oee.toFixed(1)}%</td>
     </tr>`;
-  }).join('');
+  };
 
-  // 선택 유지
-  if (_selectedAnalysisKey && grouped[_selectedAnalysisKey]) {
-    showAnalysisDrilldown(_selectedAnalysisKey, true);
+  if (_selectedAnalysisKey && keys.includes(_selectedAnalysisKey)) {
+    const backRow = `<tr onclick="clearAnalysisSelection()" style="cursor:pointer;background:var(--bg3)">
+      <td colspan="${colCount}" style="text-align:center;padding:10px;color:var(--accent);font-weight:700;font-size:12px">◀ 전체 목록 보기 (${keys.length}건)</td>
+    </tr>`;
+    document.getElementById('analysisTableBody').innerHTML = backRow + buildRow(_selectedAnalysisKey);
   } else {
-    _selectedAnalysisKey = null;
-    document.getElementById('analysisDrilldown').style.display = 'none';
+    document.getElementById('analysisTableBody').innerHTML = keys.map(buildRow).join('');
   }
+}
+
+function clearAnalysisSelection() {
+  _selectedAnalysisKey = null;
+  renderAnalysis();
 }
 
 // ── 분석 드릴다운 ──
@@ -3647,18 +3669,13 @@ function calcLossCodeMap(recs) {
   return map;
 }
 
-function showAnalysisDrilldown(key, keepOpen) {
-  const panel = document.getElementById('analysisDrilldown');
-  if (!keepOpen && _selectedAnalysisKey === key) {
-    _selectedAnalysisKey = null;
-    panel.style.display = 'none';
-    document.querySelectorAll('#analysisTableBody tr').forEach(r => r.classList.remove('hist-selected'));
-    return;
-  }
-  _selectedAnalysisKey = key;
-  document.querySelectorAll('#analysisTableBody tr').forEach(r =>
-    r.classList.toggle('hist-selected', r.dataset.key === key));
+function showAnalysisDrilldown(key) {
+  _selectedAnalysisKey = (_selectedAnalysisKey === key) ? null : key;
+  renderAnalysis();
+}
 
+function renderDrilldownPanel(key) {
+  const panel = document.getElementById('analysisDrilldown');
   const grouped = groupRecords(analysisPeriod);
   const currRecs = grouped[key] || [];
   const prevKey  = getPrevKey(key, analysisPeriod);
@@ -3976,6 +3993,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ══ 업데이트 내용 (버전 올릴 때마다 수정) ══
 const UPDATE_NOTES = [
+  '📈 분석 탭 — 품번별 상세 데이터 선택 시 목록이 선택 항목만 남는 패널로 접히고 드릴다운 분석이 바로 아래 표시되도록 개선 (스크롤 없이 확인 가능)',
+  '👤 이력 조회 탭 — "모델별 생산량 합계"에 작업자(입력자) 정보 표시 추가',
   '🛟 신규: "데이터 관리"에 실적 복구 기능 추가 — Firebase 백업 JSON으로 사라진 실적을 안전하게 되살릴 수 있습니다 (기존 데이터는 지우지 않고 빠진 것만 추가)',
   '⚠️ 중요 수정: "데이터 가져오기" 시 다른 사람이 입력한 최신 실적이 사라지던 문제 해결 — 이제 기존 데이터를 지우지 않고 새 항목만 안전하게 추가됩니다',
   '실적 데이터 저장 방식 개선 — 여러 사람이 동시에 입력해도 데이터가 사라지지 않도록 구조 변경',

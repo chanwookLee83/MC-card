@@ -1,6 +1,6 @@
 // ⚙️ 머신카드 Service Worker v6.1
-const CACHE_NAME = 'machine-card-v72';
-const STATIC_CACHE = 'machine-card-static-v72';
+const CACHE_NAME = 'machine-card-v73';
+const STATIC_CACHE = 'machine-card-static-v73';
 
 // 캐시할 파일 목록
 const CACHE_FILES = [

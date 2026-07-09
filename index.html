@@ -3388,6 +3388,20 @@ function scheduleItemHtml(s, showDelete) {
   </div>`;
 }
 
+// 가동현황 하단 패널 전용 - 1줄형 축약 표시 (카드형보다 절반 이하 높이)
+function scheduleCompactItemHtml(s) {
+  const p = PRODUCTS.find(x => x.no === s.partNo);
+  const d = scheduleDday(s.date);
+  return `
+  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:5px;font-size:12px">
+    <span style="font-size:15px;flex-shrink:0">${p ? p.emoji : '🗓️'}</span>
+    <span style="font-family:'JetBrains Mono',monospace;color:var(--accent);font-weight:700;flex-shrink:0">${s.partNo}</span>
+    <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${s.partName || (p ? p.name : '')}</span>
+    <span style="color:var(--muted);flex-shrink:0;font-family:'JetBrains Mono',monospace">${s.date.slice(5)} · ${(+s.qty || 0).toLocaleString()}ea</span>
+    <span class="remaining-badge ${d.cls}" style="flex-shrink:0;font-size:10px;padding:2px 8px">${d.label}</span>
+  </div>`;
+}
+
 function renderScheduleList() {
   const el    = document.getElementById('scheduleList');
   const empty = document.getElementById('scheduleEmpty');
@@ -3417,7 +3431,7 @@ function renderScheduleBottomPanel() {
 
   if (!upcoming.length) { panel.style.display = 'none'; return; }
   panel.style.display = 'block';
-  list.innerHTML = upcoming.map(s => scheduleItemHtml(s, false)).join('');
+  list.innerHTML = upcoming.map(s => scheduleCompactItemHtml(s)).join('');
 }
 
 // ══════════════════════════════
@@ -4283,6 +4297,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ══ 업데이트 내용 (버전 올릴 때마다 수정) ══
 const UPDATE_NOTES = [
+  '🗓️ 가동현황 하단 생산일정 패널을 작은 1줄형 리스트로 축소 — 카드형 대비 높이를 크게 줄여 화면을 덜 차지합니다',
   '🗓️ 생산일정 자동 완료 — 라인을 "가동중"으로 바꾸면 그 라인의 담당 품번 + 오늘 날짜와 정확히 일치하는 생산일정이 자동으로 삭제(완료 처리)됩니다 (날짜가 다른 일정은 유지)',
   '🔧 가동현황 자동 전환 — 다른 탭으로 이동해도 자동 전환이 절대 꺼지지 않도록 안전장치 추가 (탭 이동 시마다 타이머 상태를 재확인)',
   '🗓️ 신규: "생산일정" 탭 추가 — 품번 자동완성으로 생산 예정일·수량을 등록하고 관리할 수 있습니다. 등록된 일정은 가동현황 탭의 자동 전환 모드에서 화면 하단에 자동으로 표시됩니다',

@@ -2855,18 +2855,18 @@ function setLineStatus(idx, status) {
   renderSlicedLineStatus();
 }
 
-// 라인이 '가동중'으로 바뀌면 해당 라인의 담당 품번과 일치하는 생산일정 중
-// 가장 임박한(날짜가 가장 빠른) 1건을 자동으로 완료 처리(삭제)한다 — 같은 품번의
-// 더 나중 일정은 남겨둔다. '가동중' 버튼을 누를 때마다 매번 재확인한다.
+// 라인이 '가동중'으로 바뀌면 해당 라인의 담당 품번 + 오늘 날짜와 정확히 일치하는
+// 생산일정을 자동으로 완료 처리(삭제)한다 — 날짜가 다른(미래) 일정은 건드리지 않는다.
+// '가동중' 버튼을 누를 때마다 매번 재확인한다.
 function autoDeleteSchedulesForLine(line) {
   const partNos = line.partNos || [];
   if (!partNos.length || !SCHEDULES.length) return;
+  const today = todayDateStr();
   const deletedNos = [];
   partNos.forEach(no => {
-    const matches = SCHEDULES.filter(s => s.partNo === no);
-    if (!matches.length) return;
-    const closest = matches.reduce((a, b) => (a.date || '') <= (b.date || '') ? a : b);
-    deleteScheduleFromFirebase(closest._key);
+    const match = SCHEDULES.find(s => s.partNo === no && s.date === today);
+    if (!match) return;
+    deleteScheduleFromFirebase(match._key);
     deletedNos.push(no);
   });
   if (deletedNos.length) {
@@ -4283,7 +4283,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ══ 업데이트 내용 (버전 올릴 때마다 수정) ══
 const UPDATE_NOTES = [
-  '🗓️ 생산일정 자동 완료 — 라인을 "가동중"으로 바꾸면 그 라인의 담당 품번과 일치하는 생산일정 중 가장 임박한 1건이 자동으로 삭제(완료 처리)됩니다',
+  '🗓️ 생산일정 자동 완료 — 라인을 "가동중"으로 바꾸면 그 라인의 담당 품번 + 오늘 날짜와 정확히 일치하는 생산일정이 자동으로 삭제(완료 처리)됩니다 (날짜가 다른 일정은 유지)',
   '🔧 가동현황 자동 전환 — 다른 탭으로 이동해도 자동 전환이 절대 꺼지지 않도록 안전장치 추가 (탭 이동 시마다 타이머 상태를 재확인)',
   '🗓️ 신규: "생산일정" 탭 추가 — 품번 자동완성으로 생산 예정일·수량을 등록하고 관리할 수 있습니다. 등록된 일정은 가동현황 탭의 자동 전환 모드에서 화면 하단에 자동으로 표시됩니다',
   '📈 분석 탭 — 품번별 상세 데이터 선택 시 목록이 선택 항목만 남는 패널로 접히고 드릴다운 분석이 바로 아래 표시되도록 개선 (스크롤 없이 확인 가능)',

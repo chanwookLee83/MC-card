@@ -389,6 +389,7 @@ optgroup{color:var(--muted);font-style:normal}
   <button class="tab-btn" onclick="showPage('products',this)"><span class="tab-emoji">🏷️</span> 품번관리</button>
   <button class="tab-btn" onclick="showPage('codes',this)"><span class="tab-emoji">🔢</span> 코드관리</button>
   <button class="tab-btn" onclick="showPage('line-mgmt',this)"><span class="tab-emoji">🔧</span> 라인관리</button>
+  <button class="tab-btn" onclick="showPage('schedule',this)"><span class="tab-emoji">🗓️</span> 생산일정</button>
   <button class="tab-btn" onclick="showPage('analysis',this)"><span class="tab-emoji">📈</span> 분석</button>
 </nav>
 
@@ -422,6 +423,11 @@ optgroup{color:var(--muted);font-style:normal}
     <div style="font-size:48px;margin-bottom:10px">🏭</div>
     <div style="font-size:15px;font-weight:700;margin-bottom:6px">등록된 라인이 없습니다</div>
     <div style="font-size:13px">라인 관리 탭에서 라인을 추가하세요</div>
+  </div>
+  <!-- 자동 전환 모드일 때만 하단에 표시되는 생산 일정 -->
+  <div id="scheduleBottomPanel" style="display:none;margin-top:20px">
+    <div class="section-title" style="margin-bottom:10px">🗓️ 생산 일정</div>
+    <div id="scheduleBottomList"></div>
   </div>
 </div>
 
@@ -802,6 +808,52 @@ optgroup{color:var(--muted);font-style:normal}
   <div id="codeList"></div>
 </div>
 
+<!-- ══════════════════════════════════════
+     PAGE 7 : 생산일정
+══════════════════════════════════════ -->
+<div class="page" id="page-schedule">
+  <div class="section-title">🗓️ 생산 일정 관리</div>
+
+  <div class="form-card">
+    <div style="font-size:14px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:12px">➕ 일정 등록</div>
+    <div class="field-wrap" style="margin-bottom:10px">
+      <div class="field-label"><span class="lbl-emoji">🏷️</span> 품번</div>
+      <div style="position:relative" id="scheduleProductComboWrap">
+        <input type="text" class="field-input" id="scheduleInputProduct"
+          placeholder="품번 검색..."
+          oninput="filterScheduleProductDropdown(this.value)"
+          onfocus="filterScheduleProductDropdown(this.value)"
+          autocomplete="off">
+        <div id="scheduleProductDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:200;background:var(--bg2);border:1px solid var(--accent);border-radius:10px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div>
+      </div>
+    </div>
+    <div class="field-wrap" style="margin-bottom:10px">
+      <div class="field-label"><span class="lbl-emoji">📝</span> 품명</div>
+      <input type="text" class="field-input" id="scheduleInputProductName" placeholder="품번 선택 시 자동 표시" readonly
+        style="background:var(--bg3);color:var(--accent3);font-family:'Noto Sans KR',sans-serif">
+    </div>
+    <div class="form-row" style="margin-bottom:0">
+      <div class="field-wrap">
+        <div class="field-label"><span class="lbl-emoji">📅</span> 생산일정 날짜</div>
+        <input type="date" class="field-input" id="scheduleInputDate">
+      </div>
+      <div class="field-wrap">
+        <div class="field-label"><span class="lbl-emoji">📦</span> 생산 수량</div>
+        <input type="number" class="field-input" id="scheduleInputQty" placeholder="0">
+      </div>
+    </div>
+    <button class="btn btn-save" onclick="saveSchedule()" style="margin-top:14px">💾 일정 등록</button>
+  </div>
+
+  <div class="section-title">📋 등록된 일정</div>
+  <div id="scheduleList"></div>
+  <div id="scheduleEmpty" style="display:none;text-align:center;padding:48px 20px;color:var(--muted)">
+    <div style="font-size:48px;margin-bottom:10px">🗓️</div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px">등록된 생산 일정이 없습니다</div>
+    <div style="font-size:13px">위에서 품번과 날짜, 수량을 입력해 등록하세요</div>
+  </div>
+</div>
+
 </main>
 
 <!-- ══════════════════════════════════════
@@ -1062,6 +1114,7 @@ optgroup{color:var(--muted);font-style:normal}
     <button class="bnav-btn" onclick="showPage('products',null,'products')"><span class="bnav-icon">🏷️</span>품번</button>
     <button class="bnav-btn" onclick="showPage('codes',null,'codes')"><span class="bnav-icon">🔢</span>코드</button>
     <button class="bnav-btn" onclick="showPage('line-mgmt',null,'line-mgmt')"><span class="bnav-icon">🔧</span>라인관리</button>
+    <button class="bnav-btn" onclick="showPage('schedule',null,'schedule')"><span class="bnav-icon">🗓️</span>생산일정</button>
     <button class="bnav-btn" onclick="showPage('analysis',null,'analysis')"><span class="bnav-icon">📈</span>분석</button>
   </div>
 </nav>
@@ -1109,6 +1162,7 @@ if (FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY') {
 // ══ 데이터 ══
 let PRODUCTS  = [];
 let RECORDS   = [];
+let SCHEDULES = [];
 
 // type: loss=설비손실(OEE↓) / planned=계획손실(OEE제외) / other=기타손실(OEE↓)
 let LOSS_CODES = [
@@ -1203,19 +1257,44 @@ function deleteRecordFromFirebase(key) {
     .catch(e => console.warn('[Firebase] 실적 삭제 실패:', e));
 }
 
+// 생산 일정 1건 추가 — records와 동일하게 push()로 고유 키 발급 (동시 등록 시 키 충돌 없음)
+function addScheduleToFirebase(schedule, silent) {
+  const local = { ...schedule, _key: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2) };
+  SCHEDULES.push(local);
+  localStorage.setItem('mc_schedules', JSON.stringify(SCHEDULES));
+  if (!fbDB) return;
+  const ref = fbDB.ref(FB_REF + '/schedules').push();
+  local._key = ref.key;
+  ref.set(schedule)
+    .then(() => { if (!silent) showToast('✅ 일정 등록됨'); })
+    .catch(e => { console.warn('[Firebase] 일정 저장 실패:', e); if (!silent) showToast('❌ 저장 실패'); });
+}
+
+// 생산 일정 1건 삭제 — 해당 키만 제거
+function deleteScheduleFromFirebase(key) {
+  SCHEDULES = SCHEDULES.filter(s => s._key !== key);
+  localStorage.setItem('mc_schedules', JSON.stringify(SCHEDULES));
+  if (!fbDB || !key || key.startsWith('local-') || key.startsWith('legacy-')) return;
+  fbDB.ref(FB_REF + '/schedules/' + key).remove()
+    .catch(e => console.warn('[Firebase] 일정 삭제 실패:', e));
+}
+
 function _applyLocal() {
   const p = localStorage.getItem('mc_products');
   const r = localStorage.getItem('mc_records');
   const c = localStorage.getItem('mc_loss_codes');
   const l = localStorage.getItem('mc_lines');
   const dr = localStorage.getItem('mc_drafts');
+  const sc = localStorage.getItem('mc_schedules');
   if (p)  PRODUCTS   = JSON.parse(p);
   if (r)  RECORDS    = JSON.parse(r);
   if (c)  LOSS_CODES = JSON.parse(c);
   if (l)  LINES      = JSON.parse(l);
   if (dr) DRAFTS     = JSON.parse(dr);
+  if (sc) SCHEDULES  = JSON.parse(sc);
   // 과거(키 없는) 형식으로 저장된 로컬 레코드에 임시 키 부여 (fbDB 연결 시 마이그레이션에서 실제 키로 교체됨)
-  RECORDS = RECORDS.map((r, i) => r._key ? r : { ...r, _key: 'legacy-' + i });
+  RECORDS   = RECORDS.map((r, i) => r._key ? r : { ...r, _key: 'legacy-' + i });
+  SCHEDULES = SCHEDULES.map((s, i) => s._key ? s : { ...s, _key: 'legacy-' + i });
 }
 
 function loadData(callback) {
@@ -1228,6 +1307,7 @@ function loadData(callback) {
       if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
       if (Array.isArray(d.lines))     LINES      = d.lines;
       if (Array.isArray(d.drafts))    DRAFTS     = d.drafts;
+      if (d.schedules)                SCHEDULES  = _recordsObjToArray(d.schedules);
       if (d.slideState) {
         _slideActive   = !!d.slideState.active;
         _slideInterval = d.slideState.interval || 10;
@@ -1252,6 +1332,19 @@ function loadData(callback) {
         });
         RECORDS = newRecords;
         localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+      }
+      if (SCHEDULES.length) {
+        // Firebase가 비어있는 최초 상태 — 로컬에 남아있던 일정을 개별 키로 업로드
+        const schedulesRef = fbDB.ref(FB_REF + '/schedules');
+        const newSchedules = [];
+        SCHEDULES.forEach(rec => {
+          const { _key, ...rest } = rec;
+          const ref = schedulesRef.push();
+          ref.set(rest);
+          newSchedules.push({ ...rest, _key: ref.key });
+        });
+        SCHEDULES = newSchedules;
+        localStorage.setItem('mc_schedules', JSON.stringify(SCHEDULES));
       }
     }
     callback();
@@ -1317,6 +1410,31 @@ function setupRealtimeSync() {
   });
   // 초기 child_added 일괄 수신이 끝난 뒤부터 토스트/재렌더링을 활성화 (최초 로드 시 매 건마다 알림 방지)
   setTimeout(() => { _recordsSyncReady = true; }, 3000);
+
+  // schedules(생산일정)도 records와 동일하게 child 단위로 감지
+  let _schedulesSyncReady = false;
+  fbDB.ref(FB_REF + '/schedules').on('child_added', snap => {
+    const key = snap.key;
+    const data = snap.val();
+    if (!data) return;
+    if (SCHEDULES.some(s => s._key === key)) return;
+    SCHEDULES.push({ ...data, _key: key });
+    localStorage.setItem('mc_schedules', JSON.stringify(SCHEDULES));
+    if (_schedulesSyncReady) {
+      renderScheduleList(); renderScheduleBottomPanel();
+      showToast('🔄 다른 기기에서 일정이 추가됨');
+    }
+  });
+  fbDB.ref(FB_REF + '/schedules').on('child_removed', snap => {
+    const key = snap.key;
+    SCHEDULES = SCHEDULES.filter(s => s._key !== key);
+    localStorage.setItem('mc_schedules', JSON.stringify(SCHEDULES));
+    if (_schedulesSyncReady) {
+      renderScheduleList(); renderScheduleBottomPanel();
+      showToast('🔄 다른 기기에서 일정이 삭제됨');
+    }
+  });
+  setTimeout(() => { _schedulesSyncReady = true; }, 3000);
 
   fbDB.ref(FB_REF + '/drafts').on('value', snap => {
     if (Date.now() - _lastDraftSave < 5000) return;
@@ -1416,7 +1534,7 @@ function onDateInput() {
 }
 
 // ══ 탭 전환 ══
-const PAGE_ORDER = ['lines','dashboard','input','history','products','codes','line-mgmt','analysis'];
+const PAGE_ORDER = ['lines','dashboard','input','history','products','codes','line-mgmt','schedule','analysis'];
 
 function showPage(name, tabEl, bnavId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1440,6 +1558,7 @@ function showPage(name, tabEl, bnavId) {
   }
   // 다른 탭으로 이동해도 타이머 유지 - 가동현황 복귀 시 이어받음
   if (name === 'line-mgmt') renderLineMgmt();
+  if (name === 'schedule')  renderScheduleList();
 
   navPushPage(name);
 }
@@ -2352,12 +2471,14 @@ function saveRecordEdit() {
 let deleteMode      = 'product';
 let deleteTargetIdx = null;
 let recordDeleteIdx = null;
+let scheduleDeleteKey = null;
 
 function closeDeleteModal() {
   navCloseModal();
   document.getElementById('deleteModal').style.display = 'none';
   deleteTargetIdx = null;
   recordDeleteIdx = null;
+  scheduleDeleteKey = null;
 }
 
 function openDeleteModal(idx) {
@@ -2377,6 +2498,18 @@ function openCodeDeleteModal(idx) {
   document.getElementById('deleteModalTitle').textContent  = '🔢 코드 삭제';
   document.getElementById('deleteTargetName').textContent  = `${c.emoji} ${c.code} · ${c.name}`;
   document.getElementById('deleteModal').style.display     = 'flex';
+  navPushModal('deleteModal');
+}
+
+function openScheduleDeleteModal(key) {
+  deleteMode = 'schedule';
+  scheduleDeleteKey = key;
+  const s = SCHEDULES.find(x => x._key === key);
+  if (!s) return;
+  document.getElementById('deleteModalTitle').textContent = '🗓️ 일정 삭제';
+  document.getElementById('deleteTargetName').innerHTML =
+    `📅 ${s.date}<br><span style="font-family:'JetBrains Mono',monospace">${s.partNo}</span> · 생산예정 ${(+s.qty || 0).toLocaleString()}ea`;
+  document.getElementById('deleteModal').style.display = 'flex';
   navPushModal('deleteModal');
 }
 
@@ -2419,6 +2552,12 @@ function confirmDelete() {
     saveData();
     showToast(`🗑️ ${removed.name} 삭제됨`);
     closeDeleteModal(); renderLineMgmt(); renderLineStatus();
+  } else if (deleteMode === 'schedule') {
+    if (!scheduleDeleteKey) return;
+    const removed = SCHEDULES.find(x => x._key === scheduleDeleteKey);
+    deleteScheduleFromFirebase(scheduleDeleteKey);
+    showToast(`🗑️ ${removed ? removed.partNo : ''} 일정 삭제됨`);
+    closeDeleteModal(); renderScheduleList(); renderScheduleBottomPanel();
   }
 }
 
@@ -2521,6 +2660,7 @@ function renderSlicedLineStatus() {
     if (grid) grid.innerHTML = '';
     if (empty) empty.style.display = 'block';
     updateSlideDots();
+    renderScheduleBottomPanel();
     return;
   }
   if (empty) empty.style.display = 'none';
@@ -2539,6 +2679,7 @@ function renderSlicedLineStatus() {
     if (grid) grid.innerHTML = allSorted.map(({ line, idx }) => buildLineCard(line, idx, false)).join('');
   }
   updateSlideDots();
+  renderScheduleBottomPanel();
 }
 
 function buildLineCard(line, idx, solo = false) {
@@ -3133,6 +3274,124 @@ function selectProduct(no) {
   document.getElementById('inputProduct').value = no;
   document.getElementById('productDropdown').style.display = 'none';
   onProductChange();
+}
+
+// ══════════════════════════════
+//  생산 일정
+// ══════════════════════════════
+function filterScheduleProductDropdown(query) {
+  const dd = document.getElementById('scheduleProductDropdown');
+  const q  = (query || '').trim().toLowerCase();
+  const list = q
+    ? PRODUCTS.filter(p => p.no.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+    : PRODUCTS;
+
+  if (!list.length) { dd.style.display = 'none'; return; }
+
+  dd.innerHTML = list.map(p => `
+    <div onmousedown="selectScheduleProduct('${p.no}')"
+      style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      <span style="font-size:22px;flex-shrink:0">${p.emoji}</span>
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);font-weight:700">${p.no}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.name} &nbsp;·&nbsp; CT ${p.ct}초</div>
+      </div>
+    </div>`).join('');
+  dd.style.display = 'block';
+}
+
+function selectScheduleProduct(no) {
+  document.getElementById('scheduleInputProduct').value = no;
+  document.getElementById('scheduleProductDropdown').style.display = 'none';
+  const p = PRODUCTS.find(x => x.no === no);
+  document.getElementById('scheduleInputProductName').value = p ? p.name : '';
+}
+
+function saveSchedule() {
+  const no   = document.getElementById('scheduleInputProduct').value.trim();
+  const date = document.getElementById('scheduleInputDate').value;
+  const qty  = +document.getElementById('scheduleInputQty').value || 0;
+  const p    = PRODUCTS.find(x => x.no === no);
+  if (!p)    { showToast('⚠️ 목록에서 품번을 선택하세요'); return; }
+  if (!date) { showToast('⚠️ 생산일정 날짜를 입력하세요');  return; }
+  if (!qty)  { showToast('⚠️ 생산 수량을 입력하세요');      return; }
+
+  addScheduleToFirebase({ partNo: p.no, partName: p.name, date, qty, createdAt: new Date().toISOString() });
+  renderScheduleList();
+  renderScheduleBottomPanel();
+
+  document.getElementById('scheduleInputProduct').value     = '';
+  document.getElementById('scheduleInputProductName').value = '';
+  document.getElementById('scheduleInputDate').value        = '';
+  document.getElementById('scheduleInputQty').value         = '';
+}
+
+function todayDateStr() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function scheduleDday(dateStr) {
+  const today  = new Date(); today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + 'T00:00:00');
+  const diff   = Math.round((target - today) / 86400000);
+  if (diff < 0)   return { label: `D+${-diff}`, cls: 'over' };
+  if (diff === 0) return { label: '오늘',        cls: 'over' };
+  return { label: `D-${diff}`, cls: 'ok' };
+}
+
+function scheduleItemHtml(s, showDelete) {
+  const p = PRODUCTS.find(x => x.no === s.partNo);
+  const d = scheduleDday(s.date);
+  return `
+  <div class="product-item">
+    <div class="product-icon">${p ? p.emoji : '🗓️'}</div>
+    <div class="product-info">
+      <div class="product-num">${s.partNo}</div>
+      <div class="product-name">${s.partName || (p ? p.name : '')}</div>
+      <div class="product-ct">📅 ${s.date} &nbsp;·&nbsp; 📦 ${(+s.qty || 0).toLocaleString()}ea</div>
+    </div>
+    <span class="remaining-badge ${d.cls}" style="flex-shrink:0">${d.label}</span>
+    ${showDelete ? `<div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="btn btn-sm" onclick="openScheduleDeleteModal('${s._key}')" style="color:var(--danger);border-color:var(--danger)">🗑️</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderScheduleList() {
+  const el    = document.getElementById('scheduleList');
+  const empty = document.getElementById('scheduleEmpty');
+  if (!el) return;
+  if (!SCHEDULES.length) {
+    el.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  const sorted = [...SCHEDULES].sort((a, b) => a.date.localeCompare(b.date));
+  el.innerHTML = sorted.map(s => scheduleItemHtml(s, true)).join('');
+}
+
+// 가동현황 탭 - 자동 전환 모드일 때만 하단에 다가오는 생산 일정을 표시
+function renderScheduleBottomPanel() {
+  const panel = document.getElementById('scheduleBottomPanel');
+  const list  = document.getElementById('scheduleBottomList');
+  if (!panel || !list) return;
+  if (!_slideActive || !SCHEDULES.length) { panel.style.display = 'none'; return; }
+
+  const today = todayDateStr();
+  const upcoming = SCHEDULES
+    .filter(s => s.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 8);
+
+  if (!upcoming.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  list.innerHTML = upcoming.map(s => scheduleItemHtml(s, false)).join('');
 }
 
 // ══════════════════════════════
@@ -3840,6 +4099,10 @@ document.addEventListener('click', e => {
     const dd = document.getElementById('productDropdown');
     if (dd) dd.style.display = 'none';
   }
+  if (!e.target.closest('#scheduleProductComboWrap')) {
+    const sdd = document.getElementById('scheduleProductDropdown');
+    if (sdd) sdd.style.display = 'none';
+  }
 });
 
 // ══ 테마 ══
@@ -3982,6 +4245,7 @@ document.addEventListener('DOMContentLoaded', () => {
     syncProductSelect();
     renderDashboard();
     renderHistory();
+    renderScheduleList();
     renderLineStatus();
     renderDraftList();
     applyProductCollapsed();
@@ -3993,6 +4257,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ══ 업데이트 내용 (버전 올릴 때마다 수정) ══
 const UPDATE_NOTES = [
+  '🗓️ 신규: "생산일정" 탭 추가 — 품번 자동완성으로 생산 예정일·수량을 등록하고 관리할 수 있습니다. 등록된 일정은 가동현황 탭의 자동 전환 모드에서 화면 하단에 자동으로 표시됩니다',
   '📈 분석 탭 — 품번별 상세 데이터 선택 시 목록이 선택 항목만 남는 패널로 접히고 드릴다운 분석이 바로 아래 표시되도록 개선 (스크롤 없이 확인 가능)',
   '👤 이력 조회 탭 — "모델별 생산량 합계"에 작업자(입력자) 정보 표시 추가',
   '🛟 신규: "데이터 관리"에 실적 복구 기능 추가 — Firebase 백업 JSON으로 사라진 실적을 안전하게 되살릴 수 있습니다 (기존 데이터는 지우지 않고 빠진 것만 추가)',

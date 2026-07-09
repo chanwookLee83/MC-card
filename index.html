@@ -1552,13 +1552,13 @@ function showPage(name, tabEl, bnavId) {
     if (searchEl) searchEl.style.display = analysisPeriod === 'product' ? '' : 'none';
     requestAnimationFrame(renderAnalysis);
   }
-  if (name === 'lines') {
-    renderLineStatus();
-    if (_slideActive && !_slideTimer) startSlideTimer();
-  }
-  // 다른 탭으로 이동해도 타이머 유지 - 가동현황 복귀 시 이어받음
+  if (name === 'lines') renderLineStatus();
   if (name === 'line-mgmt') renderLineMgmt();
   if (name === 'schedule')  renderScheduleList();
+
+  // 안전장치: 어느 탭으로 이동하든(가동현황이 아니어도) 자동 전환이 켜져 있으면 타이머가
+  // 반드시 돌고 있도록 보장한다 - 탭 이동 자체는 절대 자동 전환을 끄지 않는다.
+  if (_slideActive && !_slideTimer) startSlideTimer();
 
   navPushPage(name);
 }
@@ -2804,7 +2804,9 @@ function goSlidePage(n) {
   if (grid) { grid.classList.add('fading'); }
   setTimeout(() => {
     if (grid) { grid.classList.remove('fading'); }
-    renderSlicedLineStatus();
+    // renderSlicedLineStatus() 내부(예: 생산일정 패널)에서 예상치 못한 오류가 나더라도
+    // 아래 진행바 재시작 로직은 항상 실행되어 자동 전환이 멈춘 것처럼 보이지 않도록 한다.
+    try { renderSlicedLineStatus(); } catch (e) { console.warn('[가동현황] 렌더링 오류:', e); }
     if (fill && _slideActive) {
       fill.style.transition = `width ${_slideInterval}s linear`;
       fill.style.width = '100%';
@@ -3336,8 +3338,10 @@ function todayDateStr() {
 }
 
 function scheduleDday(dateStr) {
+  if (!dateStr) return { label: '-', cls: 'ok' };
   const today  = new Date(); today.setHours(0, 0, 0, 0);
   const target = new Date(dateStr + 'T00:00:00');
+  if (isNaN(target.getTime())) return { label: '-', cls: 'ok' };
   const diff   = Math.round((target - today) / 86400000);
   if (diff < 0)   return { label: `D+${-diff}`, cls: 'over' };
   if (diff === 0) return { label: '오늘',        cls: 'over' };
@@ -3372,7 +3376,7 @@ function renderScheduleList() {
     return;
   }
   if (empty) empty.style.display = 'none';
-  const sorted = [...SCHEDULES].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = [...SCHEDULES].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   el.innerHTML = sorted.map(s => scheduleItemHtml(s, true)).join('');
 }
 
@@ -3385,7 +3389,7 @@ function renderScheduleBottomPanel() {
 
   const today = todayDateStr();
   const upcoming = SCHEDULES
-    .filter(s => s.date >= today)
+    .filter(s => s.date && s.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 8);
 
@@ -4257,6 +4261,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ══ 업데이트 내용 (버전 올릴 때마다 수정) ══
 const UPDATE_NOTES = [
+  '🔧 가동현황 자동 전환 — 다른 탭으로 이동해도 자동 전환이 절대 꺼지지 않도록 안전장치 추가 (탭 이동 시마다 타이머 상태를 재확인)',
   '🗓️ 신규: "생산일정" 탭 추가 — 품번 자동완성으로 생산 예정일·수량을 등록하고 관리할 수 있습니다. 등록된 일정은 가동현황 탭의 자동 전환 모드에서 화면 하단에 자동으로 표시됩니다',
   '📈 분석 탭 — 품번별 상세 데이터 선택 시 목록이 선택 항목만 남는 패널로 접히고 드릴다운 분석이 바로 아래 표시되도록 개선 (스크롤 없이 확인 가능)',
   '👤 이력 조회 탭 — "모델별 생산량 합계"에 작업자(입력자) 정보 표시 추가',

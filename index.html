@@ -1871,9 +1871,13 @@ function renderHistorySummary(base) {
     }
     if (!periodMap[groupKey]) periodMap[groupKey] = { label: groupLabel, models: {} };
     const m = periodMap[groupKey].models;
-    if (!m[r.partNo]) m[r.partNo] = { qty: 0, defect: 0, workers: new Set() };
+    if (!m[r.partNo]) m[r.partNo] = { qty: 0, defect: 0, avail: 0, perf: 0, qual: 0, count: 0, workers: new Set() };
     m[r.partNo].qty    += (r.qty    || 0);
     m[r.partNo].defect += (r.defect || 0);
+    m[r.partNo].avail  += (r.avail  || 0);
+    m[r.partNo].perf   += (r.perf   || 0);
+    m[r.partNo].qual   += (r.qual   || 0);
+    m[r.partNo].count  += 1;
     if (r.inputBy) m[r.partNo].workers.add(r.inputBy);
   });
 
@@ -1885,6 +1889,10 @@ function renderHistorySummary(base) {
     const totalQty  = entries.reduce((s, [, m]) => s + m.qty,    0);
     const totalDef  = entries.reduce((s, [, m]) => s + m.defect, 0);
     const totalGood = totalQty - totalDef;
+    const totalAvailSum = entries.reduce((s, [, m]) => s + m.avail, 0);
+    const totalPerfSum  = entries.reduce((s, [, m]) => s + m.perf,  0);
+    const totalQualSum  = entries.reduce((s, [, m]) => s + m.qual,  0);
+    const totalCount    = entries.reduce((s, [, m]) => s + m.count, 0);
 
     const rows = entries.map(([partNo, data], i) => {
       const p    = PRODUCTS.find(x => x.no === partNo);
@@ -1895,6 +1903,10 @@ function renderHistorySummary(base) {
       const defRate  = data.qty > 0 ? (data.defect / data.qty * 100) : 0;
       const ppm      = data.qty > 0 ? Math.round(data.defect / data.qty * 1000000) : 0;
       const workers  = Array.from(data.workers || []);
+      const avgAvail = data.count > 0 ? (data.avail / data.count * 100) : 0;
+      const avgPerf  = data.count > 0 ? (data.perf  / data.count * 100) : 0;
+      const avgQual  = data.count > 0 ? (data.qual  / data.count * 100) : 0;
+      const avgOEE   = avgAvail * avgPerf * avgQual / 10000;
       return `
         <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
           <div style="width:3px;height:32px;background:${col};border-radius:2px;flex-shrink:0"></div>
@@ -1909,11 +1921,15 @@ function renderHistorySummary(base) {
               · 불량 <span style="color:var(--danger);font-weight:700">${defRate.toFixed(2)}%</span>
               · PPM <span style="color:var(--warn);font-weight:700">${ppm.toLocaleString()}</span>
             </div>
+            <div style="margin-top:3px;font-size:10px;color:var(--muted);white-space:nowrap">
+              가동 ${avgAvail.toFixed(1)}% · 성능 ${avgPerf.toFixed(1)}% · 품질 ${avgQual.toFixed(1)}% · OEE <span class="${oeeClass(avgOEE)}">${avgOEE.toFixed(1)}%</span>
+            </div>
             ${workers.length ? `<div style="margin-top:3px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">👤 ${workers.join(', ')}</div>` : ''}
           </div>
           <div style="flex-shrink:0;text-align:right;min-width:90px">
             <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--text)">${data.qty.toLocaleString()}</div>
             <div style="font-size:10px;color:var(--muted)">불량 <span style="color:var(--danger);font-weight:700">${data.defect}</span> · 양품 <span style="color:var(--accent3);font-weight:700">${good.toLocaleString()}</span></div>
+            <div style="margin-top:3px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700" class="${oeeClass(avgOEE)}">🏆 ${avgOEE.toFixed(1)}%</div>
           </div>
           <div style="width:32px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0">${pct}%</div>
         </div>`;
@@ -1922,30 +1938,41 @@ function renderHistorySummary(base) {
     const totalGoodRate = totalQty > 0 ? (totalGood / totalQty * 100) : 0;
     const totalDefRate  = totalQty > 0 ? (totalDef / totalQty * 100) : 0;
     const totalPpm      = totalQty > 0 ? Math.round(totalDef / totalQty * 1000000) : 0;
+    const totalAvgAvail = totalCount > 0 ? (totalAvailSum / totalCount * 100) : 0;
+    const totalAvgPerf  = totalCount > 0 ? (totalPerfSum  / totalCount * 100) : 0;
+    const totalAvgQual  = totalCount > 0 ? (totalQualSum  / totalCount * 100) : 0;
+    const totalAvgOEE   = totalAvgAvail * totalAvgPerf * totalAvgQual / 10000;
 
     return `
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:6px;margin-bottom:6px">
           <div style="font-size:13px;font-weight:700;color:var(--accent)">📅 ${label}</div>
-          <div style="display:flex;gap:14px;flex-shrink:0">
+          <div style="display:flex;gap:10px;flex-shrink:0">
             <div style="text-align:right">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--text);line-height:1">${totalQty.toLocaleString()}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--text);line-height:1">${totalQty.toLocaleString()}</div>
               <div style="font-size:10px;color:var(--muted)">총 생산</div>
             </div>
             <div style="text-align:right">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--accent3);line-height:1">${totalGood.toLocaleString()}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--accent3);line-height:1">${totalGood.toLocaleString()}</div>
               <div style="font-size:10px;color:var(--muted)">총 양품</div>
             </div>
             <div style="text-align:right">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--danger);line-height:1">${totalDef.toLocaleString()}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--danger);line-height:1">${totalDef.toLocaleString()}</div>
               <div style="font-size:10px;color:var(--muted)">총 불량</div>
+            </div>
+            <div style="text-align:right">
+              <div class="${oeeClass(totalAvgOEE)}" style="font-family:'JetBrains Mono',monospace;font-size:16px;line-height:1">${totalAvgOEE.toFixed(1)}%</div>
+              <div style="font-size:10px;color:var(--muted)">평균 OEE</div>
             </div>
           </div>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:10px;font-size:11px;color:var(--muted);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
           <span>양품률 <b style="color:var(--accent3)">${totalGoodRate.toFixed(2)}%</b></span>
           <span>불량률 <b style="color:var(--danger)">${totalDefRate.toFixed(2)}%</b></span>
           <span>PPM <b style="color:var(--warn)">${totalPpm.toLocaleString()}</b></span>
+          <span>가동 <b style="color:var(--text)">${totalAvgAvail.toFixed(1)}%</b></span>
+          <span>성능 <b style="color:var(--text)">${totalAvgPerf.toFixed(1)}%</b></span>
+          <span>품질 <b style="color:var(--text)">${totalAvgQual.toFixed(1)}%</b></span>
         </div>
         ${rows}
       </div>`;
@@ -4297,6 +4324,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ══ 업데이트 내용 (버전 올릴 때마다 수정) ══
 const UPDATE_NOTES = [
+  '📊 이력조회 탭 "모델별 생산량 합계"에 가동률·성능·품질·OEE 표시 추가 (모델별 · 기간(일/주/월) 합계 모두)',
   '🗓️ 가동현황 하단 생산일정 패널을 작은 1줄형 리스트로 축소 — 카드형 대비 높이를 크게 줄여 화면을 덜 차지합니다',
   '🗓️ 생산일정 자동 완료 — 라인을 "가동중"으로 바꾸면 그 라인의 담당 품번 + 오늘 날짜와 정확히 일치하는 생산일정이 자동으로 삭제(완료 처리)됩니다 (날짜가 다른 일정은 유지)',
   '🔧 가동현황 자동 전환 — 다른 탭으로 이동해도 자동 전환이 절대 꺼지지 않도록 안전장치 추가 (탭 이동 시마다 타이머 상태를 재확인)',

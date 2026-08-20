@@ -1,8 +1,8 @@
 {
   "id": "mc-card-app",
-  "name": "머신카드 · MachineCard",
-  "short_name": "머신카드",
-  "description": "생산실적 OEE 관리 시스템",
+  "name": "조립생산현황 모니터링 시스템",
+  "short_name": "조립생산현황 모니터링 시스템",
+  "description": "조립생산현황 모니터링 시스템",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

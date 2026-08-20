@@ -1,4 +1,4 @@
-// ⚙️ 머신카드 Service Worker v6.1
+// ⚙️ 머신카드 Service Worker v6.2
 const CACHE_NAME = 'machine-card-v76';
 const STATIC_CACHE = 'machine-card-static-v76';
 
@@ -95,7 +95,7 @@ self.addEventListener('fetch', event => {
 // ── 푸시 알림 (향후 확장용) ──
 self.addEventListener('push', event => {
   const data = event.data?.json() || {};
-  const title = data.title || '⚙️ 머신카드';
+  const title = data.title || '조립생산현황 모니터링 시스템';
   const options = {
     body: data.body || '새 알림이 있습니다',
     icon: './icons/icon-192x192.png',
@@ -111,4 +111,4 @@ self.addEventListener('notificationclick', event => {
   event.waitUntil(clients.openWindow(event.notification.data.url));
 });
 
-console.log('[SW] ⚙️ 머신카드 Service Worker 로드됨');
+console.log('[SW] 조립생산현황 모니터링 시스템 Service Worker 로드됨');

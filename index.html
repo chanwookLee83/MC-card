@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>⚙️ 머신카드 · MachineCard</title>
+<title>조립생산현황 모니터링 시스템</title>
 
 <!-- PWA Manifest -->
 <link rel="manifest" href="manifest.json">
@@ -21,7 +21,7 @@
 <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152x152.png">
 <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192x192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512x512.png">
-<meta name="apple-mobile-web-app-title" content="머신카드">
+<meta name="apple-mobile-web-app-title" content="조립생산현황 모니터링 시스템">
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png">
@@ -368,8 +368,7 @@ optgroup{color:var(--muted);font-style:normal}
 <header>
   <div class="logo">⚙️ MC</div>
   <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
-    <div style="font-size:18px;font-weight:700;line-height:1">머신카드</div>
-    <div style="font-size:14px;color:var(--muted)">생산실적 관리 시스템</div>
+    <div style="font-size:18px;font-weight:700;line-height:1">조립생산현황 모니터링 시스템</div>
   </div>
   <button id="themeToggle" onclick="toggleTheme()"
     style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:5px 10px;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;transition:all .2s">🌙</button>
@@ -460,8 +459,9 @@ optgroup{color:var(--muted);font-style:normal}
   <!-- OEE 합계 -->
   <div class="oee-total">
     <div>
-      <div class="oee-total-label">🏆 OEE</div>
+      <div class="oee-total-label" id="oeeTotalLabel">🏆 OEE</div>
       <div class="oee-total-value" id="oeeTotal">-<span style="font-size:24px">%</span></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px" id="oeeBasisCaption"></div>
     </div>
     <div style="flex:1">
       <div class="oee-total-bar"><div class="oee-total-fill" id="oeeFill" style="width:0%"></div></div>
@@ -743,7 +743,14 @@ optgroup{color:var(--muted);font-style:normal}
     <button class="period-btn" onclick="setPeriod('week',this)">📆 주별</button>
     <button class="period-btn" onclick="setPeriod('month',this)">🗓️ 월별</button>
   </div>
-  <select class="dash-filter-select" id="histFilterSelect" onchange="setHistFilter(this.value)" style="margin-top:8px"></select>
+  <div style="position:relative;margin-top:8px" id="histFilterWrap">
+    <input type="text" class="field-input" id="histFilterInput"
+      placeholder="🔍 품번 검색 또는 선택 (비워두면 전체 품번)"
+      oninput="filterHistProductDropdown(this.value)"
+      onfocus="filterHistProductDropdown(this.value)"
+      autocomplete="off">
+    <div id="histFilterDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:200;background:var(--bg2);border:1px solid var(--accent);border-radius:10px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div>
+  </div>
 
   <!-- 모델별 생산량 합계 -->
   <div id="histSummarySection" style="margin-top:12px">
@@ -871,6 +878,10 @@ optgroup{color:var(--muted);font-style:normal}
       <div class="field-wrap">
         <div class="field-label">🏷️ 품번</div>
         <input type="text" class="field-input" id="modalPartNo" placeholder="예) A-001">
+      </div>
+      <div class="field-wrap">
+        <div class="field-label">🔧 호기 (선택 · 같은 품번을 여러 설비에서 생산할 때만)</div>
+        <input type="text" class="field-input" id="modalMachine" placeholder="예) 5호 (비워두면 단일 설비로 등록)">
       </div>
       <div class="field-wrap">
         <div class="field-label">📝 품명</div>
@@ -1090,6 +1101,41 @@ optgroup{color:var(--muted);font-style:normal}
     </table>
   </div>
   <div id="analysisDrilldown" style="display:none"></div>
+
+  <!-- 라인 캐파 분석 -->
+  <div class="form-card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:16px;font-weight:700;color:var(--accent);letter-spacing:1px">🏭 라인 캐파 분석</div>
+      <button id="lineCapaToggle" onclick="toggleLineCapaPanel()" style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;padding:5px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0"></button>
+    </div>
+    <div id="lineCapaBody">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+        <input type="month" id="lineCapaMonth" class="field-input" style="width:auto;padding:6px 10px;font-size:12px" onchange="renderLineCapaAnalysis()">
+        <select id="lineCapaBasisSelect" class="field-input" style="width:auto;padding:6px 10px;font-size:12px" onchange="renderLineCapaAnalysis()">
+          <option value="20">📆 20일 기준</option>
+          <option value="25" selected>📆 25일 기준</option>
+          <option value="30">📆 30일 기준</option>
+        </select>
+        <select id="lineCapaSortSelect" class="field-input" style="width:auto;padding:6px 10px;font-size:12px" onchange="renderLineCapaAnalysis()">
+          <option value="default">🕐 라인순</option>
+          <option value="count_desc" selected>🔄 가동횟수 많은순</option>
+          <option value="count_asc">🔄 가동횟수 적은순</option>
+          <option value="qty_desc">📦 생산량 많은순</option>
+          <option value="qty_asc">📦 생산량 적은순</option>
+          <option value="capa_desc">🏆 캐파가동률 높은순</option>
+          <option value="capa_asc">🏆 캐파가동률 낮은순</option>
+        </select>
+      </div>
+      <div class="tbl-scroll">
+        <table class="hist-table">
+          <thead>
+            <tr><th>라인</th><th>담당품번</th><th>가동횟수</th><th>총가동(분)</th><th>실생산량</th><th>이론캐파</th><th>캐파가동률</th><th id="lineCapaBasisHead">가동률</th><th>OEE</th></tr>
+          </thead>
+          <tbody id="lineCapaTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- 시간 경고 모달 -->
@@ -1589,18 +1635,54 @@ function setHistFilter(partNo) {
 }
 
 function buildHistFilterSelect() {
+  const input = document.getElementById('histFilterInput');
+  if (!input) return;
+  // 검색창에 포커스가 있는 동안(입력 중)은 표시값을 강제로 되돌리지 않는다
+  if (document.activeElement === input) return;
+  input.value = histFilter === 'all' ? '' : histFilter;
+}
+
+function filterHistProductDropdown(query) {
+  const dd = document.getElementById('histFilterDropdown');
+  if (!dd) return;
   const parts = [...new Set(RECORDS.map(r => r.partNo))];
-  const sel = document.getElementById('histFilterSelect');
-  if (!sel) return;
-  sel.innerHTML = [
-    `<option value="all">📋 전체 품번</option>`,
-    ...parts.map(no => {
-      const p = PRODUCTS.find(x => x.no === no);
-      const label = p ? `${p.emoji || '🏷️'} ${no} · ${p.name}` : no;
-      return `<option value="${no}" ${histFilter === no ? 'selected' : ''}>${label}</option>`;
-    })
-  ].join('');
-  sel.value = histFilter;
+  const q = (query || '').trim().toLowerCase();
+  const list = q
+    ? parts.filter(no => {
+        const p = PRODUCTS.find(x => x.no === no);
+        return no.toLowerCase().includes(q) || (p?.name || '').toLowerCase().includes(q) || (p?.machine || '').toLowerCase().includes(q);
+      })
+    : parts;
+
+  let html = '';
+  if (!q) {
+    html += `<div onmousedown="selectHistProduct('all')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-weight:700;color:var(--accent)"
+      onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">📋 전체 품번</div>`;
+  }
+  html += list.map(no => {
+    const p = PRODUCTS.find(x => x.no === no);
+    return `<div onmousedown="selectHistProduct('${no}')"
+      style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      <span style="font-size:20px;flex-shrink:0">${p?.emoji || '🏷️'}</span>
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);font-weight:700">${p ? productDisplayNo(p) : no}</div>
+        ${p?.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${p.name}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  if (!html) { dd.style.display = 'none'; return; }
+  dd.innerHTML = html;
+  dd.style.display = 'block';
+}
+
+function selectHistProduct(no) {
+  document.getElementById('histFilterDropdown').style.display = 'none';
+  const input = document.getElementById('histFilterInput');
+  if (input) { input.value = no === 'all' ? '' : no; input.blur(); }
+  setHistFilter(no);
 }
 
 // ══ 링 차트 ══
@@ -1649,6 +1731,7 @@ function renderDashboard() {
   if (!base.length) {
     ['dTotalQty','dGoodQty','dDefectQty','dDefectRate'].forEach(id => document.getElementById(id).textContent = '-');
     document.getElementById('oeeTotal').innerHTML = '-<span style="font-size:24px">%</span>';
+    document.getElementById('oeeBasisCaption').textContent = '';
     document.getElementById('oeeFill').style.width = '0%';
     document.getElementById('oeeStatus').textContent = dashFilter === 'all' ? '📭 데이터 없음' : '📭 해당 품번 실적 없음';
     updateRing('ringAvail','ringAvailVal', 0);
@@ -1660,17 +1743,27 @@ function renderDashboard() {
     return;
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  let calc, last;
+  let calc, last, oeeCaption = '';
   const selRec = (selectedRecIdx !== null) ? RECORDS[selectedRecIdx] : null;
   if (selRec) {
     calc = [selRec];
     last = selRec;
-  } else {
-    const todayBase = base.filter(r => r.date === todayStr);
-    calc = todayBase.length ? todayBase : base;
+    oeeCaption = '선택한 실적 기준';
+  } else if (dashFilter !== 'all') {
+    // 품번이 선택된 경우 — 해당 품번의 전체 누적 평균 OEE
+    calc = base;
     last = sortRecordsByDateDesc(base)[0];
+    oeeCaption = '해당 품번 전체 누적 기준';
+  } else {
+    // 선택이 없는 경우 — 어제 날짜 전체 품번 평균 OEE
+    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yestBase = base.filter(r => r.date === yesterdayStr);
+    calc = yestBase.length ? yestBase : base;
+    last = sortRecordsByDateDesc(base)[0];
+    oeeCaption = yestBase.length ? '어제 실적 기준' : '전체 누적 기준 (어제 실적 없음)';
   }
+  const captionEl = document.getElementById('oeeBasisCaption');
+  if (captionEl) captionEl.textContent = oeeCaption;
 
   const sumQty    = calc.reduce((a, r) => a + r.qty, 0);
   const sumDefect = calc.reduce((a, r) => a + r.defect, 0);
@@ -2715,7 +2808,7 @@ function buildLineCard(line, idx, solo = false) {
   const lastRec  = lineRecs[0];
   const chips    = (line.partNos || []).map(no => {
     const p = PRODUCTS.find(x => x.no === no);
-    return `<span class="line-part-chip" style="font-size:13px;padding:3px 10px">${p ? p.emoji + ' ' : ''}${no}</span>`;
+    return `<span class="line-part-chip" style="font-size:13px;padding:3px 10px">${p ? p.emoji + ' ' + productDisplayNo(p) : no}</span>`;
   }).join('');
   const calcRecs = lineRecs.slice(0, 1);
   let oeeSum = '-';
@@ -2994,7 +3087,7 @@ function openLineModal(idx) {
       const checked = line ? (line.partNos || []).includes(p.no) : false;
       return `<label style="display:flex;align-items:center;gap:5px;background:${checked?'rgba(0,212,255,0.12)':'var(--bg3)'};border:1px solid ${checked?'var(--accent)':'var(--border)'};border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;transition:all .2s">
         <input type="checkbox" value="${p.no}" ${checked?'checked':''} onchange="toggleLinePartChk(this)" style="accent-color:var(--accent)">
-        ${p.emoji} ${p.no} · ${p.name}
+        ${p.emoji} ${productDisplayNo(p)} · ${p.name}
       </label>`;
     }).join('');
   }
@@ -3018,6 +3111,21 @@ function saveLineModal() {
   if (!name) { showToast('⚠️ 라인명을 입력하세요'); return; }
   const partNos = [...document.querySelectorAll('#lineModalPartNos input[type=checkbox]:checked')].map(el => el.value);
   const idx = +document.getElementById('lineModalIdx').value;
+
+  // 호기가 지정된 품번(예: HEADER PIN-5호)은 원래 설비 1대에 귀속되는 값이라 다른 라인에도
+  // 중복 체크되면 그 라인의 실적까지 함께 집계돼 버린다(캐파 분석 수치가 겹쳐 보이는 원인).
+  const conflicts = partNos
+    .map(no => PRODUCTS.find(p => p.no === no))
+    .filter(p => p && p.machine)
+    .filter(p => LINES.some((l, i) => i !== idx && (l.partNos || []).includes(p.no)));
+  if (conflicts.length) {
+    const detail = conflicts.map(p => {
+      const otherLine = LINES.find((l, i) => i !== idx && (l.partNos || []).includes(p.no));
+      return `${p.baseNo || p.no}(${p.machine}) → 이미 '${otherLine?.name || '?'}' 라인에 배정됨`;
+    }).join('\n');
+    if (!confirm(`⚠️ 호기가 지정된 품번이 이미 다른 라인에 배정되어 있습니다:\n${detail}\n\n이대로 저장하면 두 라인의 실적이 캐파 분석에서 함께 집계됩니다. 계속하시겠습니까?`)) return;
+  }
+
   if (idx >= 0) {
     LINES[idx] = { ...LINES[idx], name, partNos };
     showToast('✏️ 라인이 수정되었습니다');
@@ -3056,9 +3164,10 @@ function openProductModal(idx) {
   if (idx !== undefined) {
     const p = PRODUCTS[idx];
     document.getElementById('productModalTitle').textContent  = '✏️ 품번 수정';
-    document.getElementById('modalPartNo').value              = p.no;
+    document.getElementById('modalPartNo').value              = p.baseNo || p.no;
     document.getElementById('modalPartNo').readOnly           = false;
     document.getElementById('modalPartNo').style.opacity      = '1';
+    document.getElementById('modalMachine').value             = p.machine || '';
     document.getElementById('modalPartName').value            = p.name;
     document.getElementById('modalCT').value                  = p.ct;
     document.getElementById('modalEditIdx').value             = idx;
@@ -3068,6 +3177,7 @@ function openProductModal(idx) {
     document.getElementById('modalPartNo').value              = '';
     document.getElementById('modalPartNo').readOnly           = false;
     document.getElementById('modalPartNo').style.opacity      = '1';
+    document.getElementById('modalMachine').value             = '';
     document.getElementById('modalPartName').value            = '';
     document.getElementById('modalCT').value                  = '';
     document.getElementById('modalEditIdx').value             = '';
@@ -3086,18 +3196,25 @@ function closeProductModal() {
   document.getElementById('productModal').style.display = 'none';
 }
 
+// 호기가 있으면 "품번-호기"를 실제 고유 품번(no)으로 사용해 앱 전체(실적입력/이력/분석/라인관리 등)에서
+// 서로 다른 설비로 구분되도록 한다. baseNo/machine은 화면 표시용으로 별도 보관.
 function saveProduct() {
-  const no   = document.getElementById('modalPartNo').value.trim();
+  const baseNo = document.getElementById('modalPartNo').value.trim();
+  const machine = document.getElementById('modalMachine').value.trim();
   const name = document.getElementById('modalPartName').value.trim();
   const ct   = +document.getElementById('modalCT').value;
   const idx  = document.getElementById('modalEditIdx').value;
-  if (!no)   { showToast('⚠️ 품번을 입력하세요'); return; }
-  if (!name) { showToast('⚠️ 품명을 입력하세요'); return; }
-  if (!ct)   { showToast('⚠️ CT를 입력하세요');   return; }
+  if (!baseNo) { showToast('⚠️ 품번을 입력하세요'); return; }
+  if (!name)   { showToast('⚠️ 품명을 입력하세요'); return; }
+  if (!ct)     { showToast('⚠️ CT를 입력하세요');   return; }
+
+  const no = machine ? `${baseNo}-${machine}` : baseNo;
+  const dupMsg = machine ? '⚠️ 이미 등록된 품번+호기 조합' : '⚠️ 이미 등록된 품번 (다른 설비라면 호기를 입력하세요)';
+
   if (idx !== '') {
     const oldNo = PRODUCTS[+idx].no;
-    if (no !== oldNo && PRODUCTS.find((p, i) => p.no === no && i !== +idx)) { showToast('⚠️ 이미 등록된 품번'); return; }
-    PRODUCTS[+idx] = { no, name, ct, emoji: selectedProductEmoji };
+    if (no !== oldNo && PRODUCTS.find((p, i) => p.no === no && i !== +idx)) { showToast(dupMsg); return; }
+    PRODUCTS[+idx] = { no, baseNo, machine, name, ct, emoji: selectedProductEmoji };
     if (no !== oldNo) {
       RECORDS.forEach(r => {
         if (r.partNo === oldNo) {
@@ -3107,12 +3224,19 @@ function saveProduct() {
           updateRecordInFirebase(_key, updated);
         }
       });
+      // 품번(no)이 바뀌면 라인관리에서 이 품번을 담당 품번으로 체크해둔 라인도 함께 갱신해야
+      // 라인 캐파 분석 등에서 옛 품번을 참조한 채로 남는(=엉뚱한 라인 데이터가 섞이는) 사고를 막을 수 있다.
+      LINES.forEach(l => {
+        if ((l.partNos || []).includes(oldNo)) {
+          l.partNos = l.partNos.map(p => p === oldNo ? no : p);
+        }
+      });
     }
     saveData();
     showToast(`✏️ ${no} 수정 완료!`);
   } else {
-    if (PRODUCTS.find(p => p.no === no)) { showToast('⚠️ 이미 등록된 품번'); return; }
-    PRODUCTS.push({ no, name, ct, emoji: selectedProductEmoji });
+    if (PRODUCTS.find(p => p.no === no)) { showToast(dupMsg); return; }
+    PRODUCTS.push({ no, baseNo, machine, name, ct, emoji: selectedProductEmoji });
     saveData();
     showToast(`✅ ${no} 등록 완료!`);
   }
@@ -3147,7 +3271,7 @@ function renderProductList() {
     <div class="product-item" style="cursor:default">
       <div class="product-icon">${p.emoji}</div>
       <div class="product-info">
-        <div class="product-num">${p.no}</div>
+        <div class="product-num">${p.baseNo || p.no}${p.machine ? ` <span style="font-size:11px;color:var(--accent2);background:rgba(255,105,180,0.12);border-radius:8px;padding:1px 7px;margin-left:2px;font-weight:700">🔧 ${p.machine}</span>` : ''}</div>
         <div class="product-name">${p.name}</div>
         <div class="product-ct">⏱️ CT: ${p.ct}초/ea &nbsp;·&nbsp; 시간당 ${Math.floor(3600/p.ct)}ea</div>
       </div>
@@ -3299,12 +3423,21 @@ function restoreRecords(e) {
   reader.readAsText(file);
 }
 
+// 호기가 있는 품번은 "품번 🔧호기" 형태로 구분해서 보여준다
+function productDisplayNo(p) {
+  return p.machine
+    ? `${p.baseNo || p.no} <span style="color:var(--accent2);font-weight:700">🔧${p.machine}</span>`
+    : (p.baseNo || p.no);
+}
+
+function productMatchesQuery(p, q) {
+  return p.no.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || (p.machine || '').toLowerCase().includes(q);
+}
+
 function filterProductDropdown(query) {
   const dd = document.getElementById('productDropdown');
   const q  = (query || '').trim().toLowerCase();
-  const list = q
-    ? PRODUCTS.filter(p => p.no.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
-    : PRODUCTS;
+  const list = q ? PRODUCTS.filter(p => productMatchesQuery(p, q)) : PRODUCTS;
 
   if (!list.length) { dd.style.display = 'none'; return; }
 
@@ -3314,7 +3447,7 @@ function filterProductDropdown(query) {
       onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
       <span style="font-size:22px;flex-shrink:0">${p.emoji}</span>
       <div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);font-weight:700">${p.no}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);font-weight:700">${productDisplayNo(p)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.name} &nbsp;·&nbsp; CT ${p.ct}초</div>
       </div>
     </div>`).join('');
@@ -3333,9 +3466,7 @@ function selectProduct(no) {
 function filterScheduleProductDropdown(query) {
   const dd = document.getElementById('scheduleProductDropdown');
   const q  = (query || '').trim().toLowerCase();
-  const list = q
-    ? PRODUCTS.filter(p => p.no.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
-    : PRODUCTS;
+  const list = q ? PRODUCTS.filter(p => productMatchesQuery(p, q)) : PRODUCTS;
 
   if (!list.length) { dd.style.display = 'none'; return; }
 
@@ -3345,7 +3476,7 @@ function filterScheduleProductDropdown(query) {
       onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
       <span style="font-size:22px;flex-shrink:0">${p.emoji}</span>
       <div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);font-weight:700">${p.no}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);font-weight:700">${productDisplayNo(p)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.name} &nbsp;·&nbsp; CT ${p.ct}초</div>
       </div>
     </div>`).join('');
@@ -3849,6 +3980,8 @@ function renderAnalysis() {
     <div class="akpi-card"><div class="akpi-val" style="color:var(${avgOEE>=85?'--accent3':avgOEE>=70?'--warn':'--danger'})">${totalRecs ? avgOEE.toFixed(1)+'%' : '-'}</div><div class="akpi-lbl">🏆 평균 OEE</div></div>
   `;
 
+  renderLineCapaAnalysis();
+
   if (!RECORDS.length) {
     renderAnalysisChart([], '📭 저장된 실적이 없습니다');
     document.getElementById('analysisTableBody').innerHTML = '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--muted)">📭 데이터 없음</td></tr>';
@@ -3963,8 +4096,104 @@ function clearAnalysisSelection() {
   renderAnalysis();
 }
 
+// ── 라인 캐파 분석 콜렙시블 ──
+let lineCapaCollapsed = localStorage.getItem('mc_line_capa_collapsed') === '1';
+
+function toggleLineCapaPanel() {
+  lineCapaCollapsed = !lineCapaCollapsed;
+  localStorage.setItem('mc_line_capa_collapsed', lineCapaCollapsed ? '1' : '0');
+  applyLineCapaCollapsed();
+  if (!lineCapaCollapsed) renderLineCapaAnalysis();
+}
+
+function applyLineCapaCollapsed() {
+  const btn = document.getElementById('lineCapaToggle');
+  if (btn) btn.textContent = lineCapaCollapsed ? '▼ 펼치기' : '▲ 접기';
+  const body = document.getElementById('lineCapaBody');
+  if (body) body.style.display = lineCapaCollapsed ? 'none' : '';
+}
+
+// ── 라인 캐파 분석 ──
+function renderLineCapaAnalysis() {
+  applyLineCapaCollapsed();
+  if (lineCapaCollapsed) return;
+
+  const monthInput = document.getElementById('lineCapaMonth');
+  if (monthInput && !monthInput.value) monthInput.value = new Date().toISOString().slice(0, 7);
+  const month = monthInput ? monthInput.value : '';
+  const body = document.getElementById('lineCapaTableBody');
+  if (!body) return;
+
+  const basisDays = +(document.getElementById('lineCapaBasisSelect')?.value) || 25;
+  const basisHead = document.getElementById('lineCapaBasisHead');
+  if (basisHead) basisHead.textContent = `가동률(${basisDays}일 기준)`;
+
+  if (!LINES.length) {
+    body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">📭 등록된 라인이 없습니다</td></tr>';
+    return;
+  }
+
+  // 호기가 지정된 품번이 2개 이상의 라인에 동시에 배정돼 있으면(설정 실수), 그 라인들의 실적이
+  // 서로 뒤섞여 집계된다 — 몇 개의 라인에 걸쳐 배정됐는지 미리 집계해서 표에 경고로 노출한다.
+  const machineNoLineCount = {};
+  LINES.forEach(l => (l.partNos || []).forEach(no => {
+    const p = PRODUCTS.find(x => x.no === no);
+    if (p && p.machine) machineNoLineCount[no] = (machineNoLineCount[no] || 0) + 1;
+  }));
+
+  let rows = LINES.map(line => {
+    const partNos = line.partNos || [];
+    const conflictNos = partNos.filter(no => machineNoLineCount[no] > 1);
+    const recs = RECORDS.filter(r => partNos.includes(r.partNo) && (!month || r.date.slice(0, 7) === month));
+    const runMin    = recs.reduce((a, r) => a + (r.runMin || 0), 0);
+    const qty       = recs.reduce((a, r) => a + (r.qty || 0), 0);
+    const theoCapa  = recs.reduce((a, r) => a + (r.ct > 0 ? r.runMin * 60 / r.ct : 0), 0);
+    const capaRate  = theoCapa > 0 ? qty / theoCapa * 100 : 0;
+    const activeDays = new Set(recs.map(r => r.date)).size;
+    const basisRate  = basisDays > 0 ? activeDays / basisDays * 100 : 0;
+    const oee       = recs.length ? calcGroup(recs).oee : 0;
+    return { line, partNos, conflictNos, recs, runMin, qty, theoCapa, capaRate, activeDays, basisRate, oee };
+  });
+
+  // 정렬 기준 적용 (기본값: 가동횟수 많은순)
+  const sortMode = document.getElementById('lineCapaSortSelect')?.value || 'count_desc';
+  if (sortMode === 'count_desc')     rows.sort((a, b) => b.recs.length - a.recs.length);
+  else if (sortMode === 'count_asc') rows.sort((a, b) => a.recs.length - b.recs.length);
+  else if (sortMode === 'qty_desc')  rows.sort((a, b) => b.qty - a.qty);
+  else if (sortMode === 'qty_asc')   rows.sort((a, b) => a.qty - b.qty);
+  else if (sortMode === 'capa_desc') rows.sort((a, b) => b.capaRate - a.capaRate);
+  else if (sortMode === 'capa_asc')  rows.sort((a, b) => a.capaRate - b.capaRate);
+
+  body.innerHTML = rows.map(({ line, partNos, conflictNos, recs, runMin, qty, theoCapa, capaRate, activeDays, basisRate, oee }) => {
+    const partLabel = partNos.length ? partNos.join(' · ') : '담당 품번 없음';
+    const partLabelShort = partNos.length ? partNos[0] + (partNos.length > 1 ? ` 외 ${partNos.length - 1}건` : '') : '담당 품번 없음';
+    const rateColor = !recs.length ? 'var(--muted)' : capaRate >= 90 ? 'var(--accent3)' : capaRate >= 70 ? 'var(--warn)' : 'var(--danger)';
+    const basisColor = !recs.length ? 'var(--muted)' : basisRate >= 90 ? 'var(--accent3)' : basisRate >= 70 ? 'var(--warn)' : 'var(--danger)';
+    const conflictBadge = conflictNos.length
+      ? `<div style="margin-top:3px"><span title="${conflictNos.join(', ')}은(는) 다른 라인에도 배정되어 있어 실적이 함께 집계됩니다. 라인관리에서 배정을 확인하세요." style="font-size:10px;color:var(--danger);background:rgba(255,64,96,0.12);border:1px solid rgba(255,64,96,0.3);border-radius:8px;padding:1px 6px;font-weight:700;cursor:help">⚠️ 품번 중복배정</span></div>`
+      : '';
+    return `<tr class="hist-row" style="font-size:12px">
+      <td style="font-weight:700;white-space:nowrap">${line.name}</td>
+      <td style="color:var(--muted);white-space:nowrap" title="${partLabel}">${partLabelShort}${conflictBadge}</td>
+      <td>${recs.length}</td>
+      <td>${runMin.toLocaleString()}</td>
+      <td>${qty.toLocaleString()}</td>
+      <td>${Math.round(theoCapa).toLocaleString()}</td>
+      <td style="color:${rateColor};font-weight:700">${recs.length ? capaRate.toFixed(1) + '%' : '-'}</td>
+      <td style="color:${basisColor};font-weight:700">${recs.length ? `${basisRate.toFixed(1)}% (${activeDays}/${basisDays}일)` : '-'}</td>
+      <td>${recs.length ? oee.toFixed(1) + '%' : '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
 // ── 분석 드릴다운 ──
 let _selectedAnalysisKey = null;
+let _lossCodeSortMode = 'cur_desc';
+
+function setLossCodeSort(v) {
+  _lossCodeSortMode = v;
+  if (_selectedAnalysisKey) renderDrilldownPanel(_selectedAnalysisKey);
+}
 
 function getPrevKey(key, period) {
   if (period === 'week') {
@@ -4049,7 +4278,13 @@ function renderDrilldownPanel(key) {
     const preObj = prevCodes[code] || { min: 0, notes: [] };
     const lc  = LOSS_CODES.find(c => c.code === code) || { name: code, color:'#6b7fa3', emoji:'⚫' };
     return { code, cur: curObj.min, pre: preObj.min, notes: curObj.notes, diff: curObj.min - preObj.min, lc };
-  }).sort((a, b) => b.cur - a.cur);
+  }).sort((a, b) => {
+    if (_lossCodeSortMode === 'cur_asc')  return a.cur - b.cur;
+    if (_lossCodeSortMode === 'diff_desc') return b.diff - a.diff;
+    if (_lossCodeSortMode === 'diff_asc')  return a.diff - b.diff;
+    if (_lossCodeSortMode === 'name')      return a.lc.name.localeCompare(b.lc.name);
+    return b.cur - a.cur; // cur_desc (기본)
+  });
 
   const codeHtml = codeItems.length ? codeItems.map(({ code, cur, pre, diff, notes, lc }) => {
     let badge = '';
@@ -4081,6 +4316,9 @@ function renderDrilldownPanel(key) {
   const keyLabel = isProduct ? ((drillProduct?.emoji||'')+' '+key + (drillProduct?.name ? ` · ${drillProduct.name}` : '')) : key;
   const cmpLabel = hasPrev ? `vs ${prevKey}` : '이전 데이터 없음';
 
+  const monthlyHtml = isProduct ? buildMonthlyRunCountHtml(key) : '';
+  const rankingHtml = isProduct ? '' : buildPartRankingHtml(currRecs);
+
   panel.style.display = 'block';
   panel.innerHTML = `<div class="drill-panel">
     <div class="drill-header">
@@ -4092,9 +4330,83 @@ function renderDrilldownPanel(key) {
     </div>
     <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:8px">📊 지표 비교</div>
     <div class="drill-metrics">${metricsHtml}</div>
-    <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:6px">🔻 손실코드 분석</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+      <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px">🔻 손실코드 분석</div>
+      <select class="dash-filter-select" style="font-size:11px;padding:3px 6px;width:auto" onchange="setLossCodeSort(this.value)">
+        <option value="cur_desc"${_lossCodeSortMode==='cur_desc'?' selected':''}>⏱️ 시간 많은순</option>
+        <option value="cur_asc"${_lossCodeSortMode==='cur_asc'?' selected':''}>⏱️ 시간 적은순</option>
+        <option value="diff_desc"${_lossCodeSortMode==='diff_desc'?' selected':''}>▲ 증가 많은순</option>
+        <option value="diff_asc"${_lossCodeSortMode==='diff_asc'?' selected':''}>▼ 감소 많은순</option>
+        <option value="name"${_lossCodeSortMode==='name'?' selected':''}>🔤 코드명순</option>
+      </select>
+    </div>
     <div>${codeHtml}</div>
+    ${rankingHtml}
+    ${monthlyHtml}
   </div>`;
+}
+
+// ── 품번별 생산 랭킹 (기간 드릴다운용) ──
+function buildPartRankingHtml(recs) {
+  const map = {};
+  recs.forEach(r => {
+    if (!r.partNo) return;
+    if (!map[r.partNo]) map[r.partNo] = { qty: 0, count: 0 };
+    map[r.partNo].qty += (r.qty || 0);
+    map[r.partNo].count++;
+  });
+  const entries = Object.entries(map).sort((a, b) => b[1].qty - a[1].qty);
+  const header = `<div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin:14px 0 8px">🏆 품번별 생산 랭킹</div>`;
+  if (!entries.length) return header + `<div style="text-align:center;padding:16px;color:var(--muted)">생산 데이터 없음</div>`;
+  const maxQty = Math.max(...entries.map(([, v]) => v.qty));
+  const medals = ['🥇', '🥈', '🥉'];
+  const rows = entries.map(([no, v], i) => {
+    const p = PRODUCTS.find(x => x.no === no);
+    const lineNames = LINES.filter(l => (l.partNos || []).includes(no)).map(l => l.name).join(', ') || '미배정';
+    const label = p?.name ? `${no} · ${p.name}` : no;
+    const pct = maxQty > 0 ? Math.round(v.qty / maxQty * 100) : 0;
+    const rankBadge = medals[i] || `${i + 1}`;
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+        <span style="width:20px;flex-shrink:0;text-align:center;font-size:12px">${rankBadge}</span>
+        <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${label}">${label}</span>
+        <span style="flex-shrink:0;font-size:10px;color:var(--muted)">🏭 ${lineNames}</span>
+        <span style="flex-shrink:0;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)">${v.qty.toLocaleString()}개</span>
+      </div>
+      <div style="height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;margin-left:28px">
+        <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px"></div>
+      </div>
+    </div>`;
+  }).join('');
+  return header + `<div>${rows}</div>`;
+}
+
+// ── 품번별 월 가동 횟수 ──
+function buildMonthlyRunCountHtml(partNo) {
+  const map = {};
+  RECORDS.forEach(r => {
+    if (r.partNo !== partNo) return;
+    const m = r.date.slice(0, 7);
+    if (!map[m]) map[m] = { count: 0, qty: 0 };
+    map[m].count++;
+    map[m].qty += r.qty;
+  });
+  const entries = Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+  const header = `<div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin:14px 0 8px">📅 월별 가동 횟수</div>`;
+  if (!entries.length) return header + `<div style="text-align:center;padding:16px;color:var(--muted)">월별 데이터 없음</div>`;
+  const maxCount = Math.max(...entries.map(([, v]) => v.count));
+  const rows = entries.map(([m, v]) => {
+    const pct = Math.round(v.count / maxCount * 100);
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div style="width:64px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text)">${m}</div>
+      <div style="flex:1;height:18px;background:var(--bg2);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:4px"></div>
+      </div>
+      <div style="width:52px;text-align:right;flex-shrink:0;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:12px">${v.count}회</div>
+      <div style="width:76px;text-align:right;flex-shrink:0;color:var(--muted);font-size:11px">${v.qty.toLocaleString()}개</div>
+    </div>`;
+  }).join('');
+  return header + rows;
 }
 
 // ── 손실코드 라인별 드릴다운 ──
@@ -4169,6 +4481,12 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#scheduleProductComboWrap')) {
     const sdd = document.getElementById('scheduleProductDropdown');
     if (sdd) sdd.style.display = 'none';
+  }
+  if (!e.target.closest('#histFilterWrap')) {
+    const hdd = document.getElementById('histFilterDropdown');
+    if (hdd) hdd.style.display = 'none';
+    const hinput = document.getElementById('histFilterInput');
+    if (hinput) hinput.value = histFilter === 'all' ? '' : histFilter;
   }
 });
 

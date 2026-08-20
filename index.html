@@ -2767,13 +2767,29 @@ function renderSlicedLineStatus() {
   if (summaryEl) {
     const counts = { running: 0, stopped: 0, idle: 0, waiting: 0 };
     LINES.forEach(l => { if (counts[l.status] !== undefined) counts[l.status]++; else counts.idle++; });
-    summaryEl.innerHTML = Object.entries(LINE_STATUS_CFG).map(([key, cfg]) =>
+
+    // 가동중인 라인에 배치된 인원(가동인원) 집계
+    const runningWorkers = new Set();
+    LINES.forEach(l => (l.workers || []).forEach(w => {
+      if (l.status === 'running') runningWorkers.add(w);
+    }));
+
+    const statusBadges = Object.entries(LINE_STATUS_CFG).map(([key, cfg]) =>
       `<div data-status="${key}" style="display:flex;align-items:center;gap:5px;background:${cfg.bg};border:1px solid ${cfg.border};border-radius:20px;padding:4px 12px">
         <span style="font-size:14px">${cfg.icon}</span>
         <span style="font-size:12px;font-weight:700;color:${cfg.color}">${cfg.label}</span>
         <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:${cfg.color}">${counts[key]}</span>
       </div>`
     ).join('');
+
+    const workerBadges = `
+      <div style="display:flex;align-items:center;gap:5px;background:rgba(0,212,255,0.13);border:1px solid var(--accent);border-radius:20px;padding:4px 12px">
+        <span style="font-size:14px">👷</span>
+        <span style="font-size:12px;font-weight:700;color:var(--accent)">가동인원</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--accent)">${runningWorkers.size}</span>
+      </div>`;
+
+    summaryEl.innerHTML = statusBadges + workerBadges;
   }
 
   if (!LINES.length) {

@@ -1220,6 +1220,7 @@ let LOSS_CODES = [
   { code:'LC-06', name:'청소·조회', type:'planned', color:'#66bbff', emoji:'🧹' },
   { code:'LC-07', name:'교육·회의', type:'planned', color:'#88ccff', emoji:'📋' },
   { code:'LC-08', name:'기타손실',  type:'other',   color:'#6b7fa3', emoji:'⚫' },
+  { code:'LC-09', name:'인원부족',  type:'other',   color:'#cc88ff', emoji:'🧑‍🏭' },
 ];
 
 const TOTAL_MIN = 720;
@@ -2358,9 +2359,13 @@ function saveRecord() {
   const inputBy = document.getElementById('inputBy').value.trim();
 
   if (!partNo) { showToast('⚠️ 품번을 선택하세요');    return; }
-  if (!qty)    { showToast('⚠️ 생산수량을 입력하세요'); return; }
-  if (!runMin) { showToast('⚠️ 가동시간을 입력하세요'); return; }
   if (!ct)     { showToast('⚠️ CT 없음 (품번 재선택)'); return; }
+  if (defect > qty) { showToast('⚠️ 불량수량이 생산수량보다 많습니다'); return; }
+  // 수량 0(인원부족 등 비가동)은 허용하되, 비가동 사유(손실코드 시간)는 반드시 입력
+  if (!qty) {
+    const hasReason = LOSS_CODES.some(c => c.type !== 'planned' && (+(document.getElementById('time_' + c.code)?.value) || 0) > 0);
+    if (!hasReason) { showToast('⚠️ 생산수량이 0이면 비가동 사유(손실코드 시간)를 입력하세요'); return; }
+  } else if (!runMin) { showToast('⚠️ 가동시간을 입력하세요'); return; }
   const runEl   = document.getElementById('inputRunTime');
   const autoVal = +(runEl.dataset.autoVal) || 0;
   if (runEl.dataset.manual && autoVal > 0 && runMin > autoVal) {
@@ -2389,8 +2394,8 @@ function saveRecord() {
   }
 
   const plannedOpMin = TOTAL_MIN - plannedSum;
-  const avail = Math.min(runMin / plannedOpMin, 1);
-  const perf  = Math.min((qty * ct / 60) / runMin, 1);
+  const avail = plannedOpMin > 0 ? Math.min(runMin / plannedOpMin, 1) : 0;
+  const perf  = (runMin > 0 && qty > 0) ? Math.min((qty * ct / 60) / runMin, 1) : 0;
   const qual  = qty > 0 ? good / qty : 0;
 
   addRecordToFirebase({ date, shift, partNo, qty, defect, good, runMin, ct, avail, perf, qual, lossCodes, inputBy });
@@ -2551,7 +2556,11 @@ function saveRecordEdit() {
   const defect  = +document.getElementById('editDefect').value || 0;
   const runMin  = +document.getElementById('editRunMin').value || 0;
   const inputBy = (document.getElementById('editInputBy')?.value || '').trim();
-  if (!qty || !runMin) { showToast('⚠️ 수량/가동시간 확인'); return; }
+  if (defect > qty) { showToast('⚠️ 불량수량이 생산수량보다 많습니다'); return; }
+  if (!qty) {
+    const hasReason = LOSS_CODES.some(c => c.type !== 'planned' && (+(document.getElementById('edit_time_' + c.code)?.value) || 0) > 0);
+    if (!hasReason) { showToast('⚠️ 생산수량이 0이면 비가동 사유(손실코드 시간)를 입력하세요'); return; }
+  } else if (!runMin) { showToast('⚠️ 수량/가동시간 확인'); return; }
   const ct   = PRODUCTS.find(p => p.no === r.partNo)?.ct || r.ct || 0;
   const good = Math.max(0, qty - defect);
   let lossSum = 0, plannedSum = 0;
@@ -2573,8 +2582,8 @@ function saveRecordEdit() {
   }
 
   const plannedOpMin = TOTAL_MIN - plannedSum;
-  const avail = Math.min(runMin / plannedOpMin, 1);
-  const perf  = ct ? Math.min((qty * ct / 60) / runMin, 1) : r.perf;
+  const avail = plannedOpMin > 0 ? Math.min(runMin / plannedOpMin, 1) : 0;
+  const perf  = (runMin > 0 && qty > 0) ? (ct ? Math.min((qty * ct / 60) / runMin, 1) : r.perf) : 0;
   const qual  = qty > 0 ? good / qty : 0;
   const { _key, ...rBase } = r;
   const updated = { ...rBase, date: document.getElementById('editDate').value, shift: document.getElementById('editShift').value, qty, defect, good, runMin, avail, perf, qual, lossCodes, inputBy };
@@ -4680,26 +4689,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ══ 업데이트 내용 (버전 올릴 때마다 수정) ══
+// ══ 업데이트 내용 ══
+// 배너에는 이번 버전의 변경사항만 표시 — 버전 올릴 때 이전 항목은 지우고 새 내용으로 교체
 const UPDATE_NOTES = [
-  '🎛️ 가동현황 상단의 가동중·종료·비가동·수리대기 배지를 필터 버튼으로 변경 — 누르면 해당 상태 라인만 표시, 여러 개 동시 선택 가능, 다시 누르면 해제',
-  '🟡 가동현황 자동 전환(슬라이드) 대상에 "수리대기" 라인도 포함 (가동중 라인 먼저 표시)',
-  '📊 이력조회 탭 "모델별 생산량 합계"에 가동률·성능·품질·OEE 표시 추가 (모델별 · 기간(일/주/월) 합계 모두)',
-  '🗓️ 가동현황 하단 생산일정 패널을 작은 1줄형 리스트로 축소 — 카드형 대비 높이를 크게 줄여 화면을 덜 차지합니다',
-  '🗓️ 생산일정 자동 완료 — 라인을 "가동중"으로 바꾸면 그 라인의 담당 품번 + 오늘 날짜와 정확히 일치하는 생산일정이 자동으로 삭제(완료 처리)됩니다 (날짜가 다른 일정은 유지)',
-  '🔧 가동현황 자동 전환 — 다른 탭으로 이동해도 자동 전환이 절대 꺼지지 않도록 안전장치 추가 (탭 이동 시마다 타이머 상태를 재확인)',
-  '🗓️ 신규: "생산일정" 탭 추가 — 품번 자동완성으로 생산 예정일·수량을 등록하고 관리할 수 있습니다. 등록된 일정은 가동현황 탭의 자동 전환 모드에서 화면 하단에 자동으로 표시됩니다',
-  '📈 분석 탭 — 품번별 상세 데이터 선택 시 목록이 선택 항목만 남는 패널로 접히고 드릴다운 분석이 바로 아래 표시되도록 개선 (스크롤 없이 확인 가능)',
-  '👤 이력 조회 탭 — "모델별 생산량 합계"에 작업자(입력자) 정보 표시 추가',
-  '🛟 신규: "데이터 관리"에 실적 복구 기능 추가 — Firebase 백업 JSON으로 사라진 실적을 안전하게 되살릴 수 있습니다 (기존 데이터는 지우지 않고 빠진 것만 추가)',
-  '⚠️ 중요 수정: "데이터 가져오기" 시 다른 사람이 입력한 최신 실적이 사라지던 문제 해결 — 이제 기존 데이터를 지우지 않고 새 항목만 안전하게 추가됩니다',
-  '실적 데이터 저장 방식 개선 — 여러 사람이 동시에 입력해도 데이터가 사라지지 않도록 구조 변경',
-  '이력 조회 탭 — 과거 날짜를 나중에 입력해도 같은 날짜로 올바르게 묶이도록 정렬 방식 수정',
-  '대시보드/가동현황 — "최근 실적" 표시를 입력 순서가 아닌 실제 날짜 기준으로 수정',
-  '가동현황 자동 전환 — 가동중인 라인만 슬라이드 대상으로 적용',
-  '분석 탭 — 품번별 검색, 정렬(OEE/불량률/생산량 높은순·낮은순), 양품률·불량률·PPM 표시 추가',
-  '모바일 뒤로가기 — 탭/모달 단계적 이동 지원 (앱이 바로 종료되지 않도록)',
-  '교대조 표기를 "주A" → "주간A조" 형태로 변경, 모델별 생산량 합계 폰트 확대',
+  '🧑‍🏭 실적 입력 — 인원부족 등으로 생산이 없을 때 수량 0으로도 등록 가능 (단, 비가동 사유 손실코드 시간은 필수 입력 · 수정 화면 동일)',
 ];
 
 // ══ Service Worker 등록 ══

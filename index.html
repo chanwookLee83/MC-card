@@ -81,6 +81,7 @@ main{padding:16px;max-width:1400px;margin:0 auto}
 .akpi-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 10px;text-align:center}
 .akpi-val{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;line-height:1;margin-bottom:4px}
 .akpi-lbl{font-size:11px;color:var(--muted);letter-spacing:0.5px}
+.akpi-delta{font-size:10px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;white-space:nowrap}
 
 /* DASH FILTER */
 .dash-filter-select{width:100%;background:var(--bg2);border:1px solid var(--accent);border-radius:8px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:600;padding:8px 12px;outline:none;margin-bottom:14px;cursor:pointer}
@@ -4033,18 +4034,49 @@ function getAnalysisKpiScope() {
     key = analysisPeriod === 'week' ? getWeekKey(today) : analysisPeriod === 'month' ? today.slice(0,7) : today.slice(0,4);
   }
   const unit = analysisPeriod === 'week' ? '주' : analysisPeriod === 'month' ? '월' : '연';
-  return { key, label: `${key} (${unit} 기준)`, recs: grouped[key] || [] };
+  const prevKey = getPrevKey(key, analysisPeriod);
+  const prevLabel = analysisPeriod === 'week' ? '전주' : analysisPeriod === 'month' ? '전월' : '전년';
+  return { key, label: `${key} (${unit} 기준)`, recs: grouped[key] || [],
+           prevKey, prevLabel, prevRecs: grouped[prevKey] || [] };
+}
+
+// 기간 KPI 값 계산 (실적 품번 / 미실적 품번 / 평균 OEE)
+function calcKpiStats(recs) {
+  const activeSet = new Set(recs.map(r => r.partNo));
+  const active    = PRODUCTS.filter(p => activeSet.has(p.no)).length;
+  const oee = recs.length ? recs.reduce((a,r) => a + r.avail*r.perf*r.qual*100, 0) / recs.length : null;
+  return { activeSet, active, inactive: PRODUCTS.length - active, oee };
+}
+
+// 이전 기간 대비 증감 표시 (upGood: 값이 오르면 좋은 지표인지)
+function kpiDeltaHtml(curr, prev, prevLabel, upGood, unit = '', digits = 0) {
+  if (prev === null || prev === undefined || curr === null || curr === undefined)
+    return `<div class="akpi-delta" style="color:var(--muted)">${prevLabel} 데이터 없음</div>`;
+  const diff = curr - prev;
+  const abs = Math.abs(diff).toFixed(digits);
+  if (+abs === 0) return `<div class="akpi-delta" style="color:var(--muted)">${prevLabel} 대비 – 0${unit}</div>`;
+  const col = (diff > 0) === upGood ? 'var(--accent3)' : 'var(--danger)';
+  return `<div class="akpi-delta" style="color:${col}">${prevLabel} 대비 ${diff > 0 ? '▲' : '▼'} ${abs}${unit}</div>`;
 }
 
 function renderAnalysisKpi() {
   const scope = getAnalysisKpiScope();
-  const recs = scope.recs;
-  const activeSet    = new Set(recs.map(r => r.partNo));
+  const curr = calcKpiStats(scope.recs);
   const totalProds   = PRODUCTS.length;
-  const activeProds  = PRODUCTS.filter(p => activeSet.has(p.no)).length;
-  const inactiveList = PRODUCTS.filter(p => !activeSet.has(p.no));
-  const totalRecs    = recs.length;
-  const avgOEE = totalRecs ? recs.reduce((a,r) => a + r.avail*r.perf*r.qual*100, 0) / totalRecs : 0;
+  const activeProds  = curr.active;
+  const inactiveList = PRODUCTS.filter(p => !curr.activeSet.has(p.no));
+  const totalRecs    = scope.recs.length;
+  const avgOEE       = curr.oee || 0;
+
+  // 전주/전월/전년 비교 (품번별 모드는 비교 없음)
+  let dActive = '', dInactive = '', dOee = '';
+  if (scope.prevKey) {
+    const prevHas = scope.prevRecs.length > 0;
+    const prev = calcKpiStats(scope.prevRecs);
+    dActive   = kpiDeltaHtml(curr.active,   prevHas ? prev.active : null,   scope.prevLabel, true,  '개');
+    dInactive = kpiDeltaHtml(curr.inactive, prevHas ? prev.inactive : null, scope.prevLabel, false, '개');
+    dOee      = kpiDeltaHtml(curr.oee,      prev.oee,                       scope.prevLabel, true,  '%p', 1);
+  }
 
   const listHtml = _showInactiveList ? `
     <div class="akpi-card" style="grid-column:1/-1;text-align:left;padding:12px 14px">
@@ -4059,11 +4091,11 @@ function renderAnalysisKpi() {
     </div>` : '';
 
   document.getElementById('analysisKpi').innerHTML = `
-    <div style="grid-column:1/-1;font-size:11px;color:var(--muted);text-align:right;margin-bottom:-4px">📌 ${scope.label}</div>
+    <div style="grid-column:1/-1;font-size:11px;color:var(--muted);text-align:right;margin-bottom:-4px">📌 ${scope.label}${scope.prevKey ? ` · 비교: ${scope.prevKey}` : ''}</div>
     <div class="akpi-card"><div class="akpi-val" style="color:var(--accent)">${totalProds}</div><div class="akpi-lbl">🏷️ 등록 품번</div></div>
-    <div class="akpi-card"><div class="akpi-val" style="color:var(--accent3)">${activeProds}</div><div class="akpi-lbl">✅ 실적 품번</div></div>
-    <div class="akpi-card" onclick="toggleInactiveList()" style="cursor:pointer${_showInactiveList ? ';border-color:var(--warn)' : ''}" title="미실적 품번 목록 보기"><div class="akpi-val" style="color:var(--warn)">${inactiveList.length}</div><div class="akpi-lbl">⏳ 미실적 품번 ${_showInactiveList ? '▲' : '▼'}</div></div>
-    <div class="akpi-card"><div class="akpi-val" style="color:var(${avgOEE>=85?'--accent3':avgOEE>=70?'--warn':'--danger'})">${totalRecs ? avgOEE.toFixed(1)+'%' : '-'}</div><div class="akpi-lbl">🏆 평균 OEE</div></div>
+    <div class="akpi-card"><div class="akpi-val" style="color:var(--accent3)">${activeProds}</div><div class="akpi-lbl">✅ 실적 품번</div>${dActive}</div>
+    <div class="akpi-card" onclick="toggleInactiveList()" style="cursor:pointer${_showInactiveList ? ';border-color:var(--warn)' : ''}" title="미실적 품번 목록 보기"><div class="akpi-val" style="color:var(--warn)">${inactiveList.length}</div><div class="akpi-lbl">⏳ 미실적 품번 ${_showInactiveList ? '▲' : '▼'}</div>${dInactive}</div>
+    <div class="akpi-card"><div class="akpi-val" style="color:var(${avgOEE>=85?'--accent3':avgOEE>=70?'--warn':'--danger'})">${totalRecs ? avgOEE.toFixed(1)+'%' : '-'}</div><div class="akpi-lbl">🏆 평균 OEE</div>${dOee}</div>
     ${listHtml}
   `;
 }
@@ -4736,18 +4768,39 @@ document.addEventListener('DOMContentLoaded', () => {
 // ══ 업데이트 내용 ══
 // 배너에는 이번 버전의 변경사항만 표시 — 버전 올릴 때 이전 항목은 지우고 새 내용으로 교체
 const UPDATE_NOTES = [
-  '🧑‍🏭 실적 입력 — 인원부족 등으로 생산이 없을 때 수량 0으로도 등록 가능 (단, 비가동 사유 손실코드 시간은 필수 입력 · 수정 화면 동일)',
+  '📈 분석 — 주별/월별/연별 선택 시 상단 KPI 카드가 이번 주·이번 달·올해(또는 선택한 기간) 기준으로 집계',
+  '⏳ 분석 — 미실적 품번 카드를 누르면 실적이 없는 품번 목록 표시',
+  '📊 분석 — KPI 카드에 전주/전월/전년 대비 증감 표시 (실적 품번 · 미실적 품번 · 평균 OEE)',
+  '🆕 업데이트 알림 — 항상 새 버전의 최종 업데이트 내용을 표시',
 ];
 
 // ══ Service Worker 등록 ══
 let _waitingSW = null;
 
-function showUpdateBanner(waiting) {
+// 배너는 아직 구버전 페이지에서 뜨므로, 새 SW가 캐시해 둔 새 index.html에서 UPDATE_NOTES를 읽어온다
+async function loadLatestUpdateNotes() {
+  try {
+    const keys = (await caches.keys()).filter(k => k.startsWith('machine-card-static-v'));
+    keys.sort((a, b) => parseInt(b.split('-v')[1]) - parseInt(a.split('-v')[1]));
+    if (!keys.length) return UPDATE_NOTES;
+    const res = await (await caches.open(keys[0])).match('./index.html');
+    if (!res) return UPDATE_NOTES;
+    const m = (await res.text()).match(/const UPDATE_NOTES = \[([\s\S]*?)\];/);
+    if (!m) return UPDATE_NOTES;
+    const notes = [...m[1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map(x => x[1].replace(/\\(.)/g, '$1'));
+    return notes.length ? notes : UPDATE_NOTES;
+  } catch (e) {
+    return UPDATE_NOTES;
+  }
+}
+
+async function showUpdateBanner(waiting) {
   _waitingSW = waiting;
   const banner = document.getElementById('updateBanner');
   const list   = document.getElementById('updateNotesList');
   if (!banner || !list) return;
-  list.innerHTML = UPDATE_NOTES.map(n => `<li>${n}</li>`).join('');
+  const notes = await loadLatestUpdateNotes();
+  list.innerHTML = notes.map(n => `<li>${n}</li>`).join('');
   banner.style.display = 'block';
 }
 

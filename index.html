@@ -4013,21 +4013,65 @@ function renderAnalysisChart(items, emptyMsg) {
   el.innerHTML = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;touch-action:pan-y">${bars}</svg></div>`;
 }
 
+// ── 분석 KPI (주/월/연 선택에 따라 해당 기간 기준으로 집계) ──
+let _showInactiveList = false;
+
+function toggleInactiveList() {
+  _showInactiveList = !_showInactiveList;
+  renderAnalysisKpi();
+}
+
+function getAnalysisKpiScope() {
+  // 품번별 모드는 전체 기간
+  if (analysisPeriod === 'product') return { key: null, label: '전체 기간', recs: RECORDS };
+  const grouped = groupRecords(analysisPeriod);
+  // 차트/테이블에서 기간을 선택했으면 그 기간, 아니면 현재(이번 주/이번 달/올해)
+  let key = (_selectedAnalysisKey && grouped[_selectedAnalysisKey]) ? _selectedAnalysisKey : null;
+  if (!key) {
+    const t = new Date();
+    const today = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    key = analysisPeriod === 'week' ? getWeekKey(today) : analysisPeriod === 'month' ? today.slice(0,7) : today.slice(0,4);
+  }
+  const unit = analysisPeriod === 'week' ? '주' : analysisPeriod === 'month' ? '월' : '연';
+  return { key, label: `${key} (${unit} 기준)`, recs: grouped[key] || [] };
+}
+
+function renderAnalysisKpi() {
+  const scope = getAnalysisKpiScope();
+  const recs = scope.recs;
+  const activeSet    = new Set(recs.map(r => r.partNo));
+  const totalProds   = PRODUCTS.length;
+  const activeProds  = PRODUCTS.filter(p => activeSet.has(p.no)).length;
+  const inactiveList = PRODUCTS.filter(p => !activeSet.has(p.no));
+  const totalRecs    = recs.length;
+  const avgOEE = totalRecs ? recs.reduce((a,r) => a + r.avail*r.perf*r.qual*100, 0) / totalRecs : 0;
+
+  const listHtml = _showInactiveList ? `
+    <div class="akpi-card" style="grid-column:1/-1;text-align:left;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;color:var(--warn)">⏳ 미실적 품번 ${inactiveList.length}건 · ${scope.label}</div>
+        <button class="period-btn" onclick="toggleInactiveList()" style="padding:4px 10px;font-size:11px">✕ 닫기</button>
+      </div>
+      ${inactiveList.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;max-height:220px;overflow-y:auto">
+        ${inactiveList.map(p => `<span style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px">
+          ${p.emoji||''} <b style="font-family:'JetBrains Mono',monospace">${p.no}</b>${p.name ? ` <span style="color:var(--muted)">${p.name}</span>` : ''}</span>`).join('')}
+      </div>` : '<div style="color:var(--muted);font-size:12px">🎉 모든 품번에 실적이 있습니다</div>'}
+    </div>` : '';
+
+  document.getElementById('analysisKpi').innerHTML = `
+    <div style="grid-column:1/-1;font-size:11px;color:var(--muted);text-align:right;margin-bottom:-4px">📌 ${scope.label}</div>
+    <div class="akpi-card"><div class="akpi-val" style="color:var(--accent)">${totalProds}</div><div class="akpi-lbl">🏷️ 등록 품번</div></div>
+    <div class="akpi-card"><div class="akpi-val" style="color:var(--accent3)">${activeProds}</div><div class="akpi-lbl">✅ 실적 품번</div></div>
+    <div class="akpi-card" onclick="toggleInactiveList()" style="cursor:pointer${_showInactiveList ? ';border-color:var(--warn)' : ''}" title="미실적 품번 목록 보기"><div class="akpi-val" style="color:var(--warn)">${inactiveList.length}</div><div class="akpi-lbl">⏳ 미실적 품번 ${_showInactiveList ? '▲' : '▼'}</div></div>
+    <div class="akpi-card"><div class="akpi-val" style="color:var(${avgOEE>=85?'--accent3':avgOEE>=70?'--warn':'--danger'})">${totalRecs ? avgOEE.toFixed(1)+'%' : '-'}</div><div class="akpi-lbl">🏆 평균 OEE</div></div>
+    ${listHtml}
+  `;
+}
+
 function renderAnalysis() {
   if (!document.getElementById('page-analysis').classList.contains('active')) return;
 
-  // KPI 카드
-  const totalProds   = PRODUCTS.length;
-  const activeProds  = new Set(RECORDS.map(r => r.partNo)).size;
-  const inactiveProds = Math.max(0, totalProds - activeProds);
-  const totalRecs    = RECORDS.length;
-  const avgOEE = totalRecs ? RECORDS.reduce((a,r) => a + r.avail*r.perf*r.qual*100, 0) / totalRecs : 0;
-  document.getElementById('analysisKpi').innerHTML = `
-    <div class="akpi-card"><div class="akpi-val" style="color:var(--accent)">${totalProds}</div><div class="akpi-lbl">🏷️ 등록 품번</div></div>
-    <div class="akpi-card"><div class="akpi-val" style="color:var(--accent3)">${activeProds}</div><div class="akpi-lbl">✅ 실적 품번</div></div>
-    <div class="akpi-card"><div class="akpi-val" style="color:var(--warn)">${inactiveProds}</div><div class="akpi-lbl">⏳ 미실적 품번</div></div>
-    <div class="akpi-card"><div class="akpi-val" style="color:var(${avgOEE>=85?'--accent3':avgOEE>=70?'--warn':'--danger'})">${totalRecs ? avgOEE.toFixed(1)+'%' : '-'}</div><div class="akpi-lbl">🏆 평균 OEE</div></div>
-  `;
+  renderAnalysisKpi();
 
   renderLineCapaAnalysis();
 

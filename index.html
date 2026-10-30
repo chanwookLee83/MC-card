@@ -1071,7 +1071,7 @@ optgroup{color:var(--muted);font-style:normal}
   </div>
 
   <!-- 품번별 검색 (품번별 모드에서만 표시) -->
-  <input type="text" class="field-input" id="analysisProductSearch" placeholder="🔍 품번 또는 품명 검색" oninput="renderAnalysis()" style="display:none;margin-bottom:16px">
+  <input type="text" class="field-input" id="analysisProductSearch" placeholder="🔍 품번 또는 품명 검색" oninput="renderAnalysis()" style="margin-bottom:16px">
 
   <!-- 정렬 기준 -->
   <select class="dash-filter-select" id="analysisSortSelect" onchange="renderAnalysis()">
@@ -1595,11 +1595,7 @@ function showPage(name, tabEl, bnavId) {
   const rf = document.getElementById('remainFloat');
   if (rf) rf.style.display = name === 'input' ? 'block' : 'none';
   if (name === 'input')     renderDraftList();
-  if (name === 'analysis') {
-    const searchEl = document.getElementById('analysisProductSearch');
-    if (searchEl) searchEl.style.display = analysisPeriod === 'product' ? '' : 'none';
-    requestAnimationFrame(renderAnalysis);
-  }
+  if (name === 'analysis') requestAnimationFrame(renderAnalysis);
   if (name === 'lines') renderLineStatus();
   if (name === 'line-mgmt') renderLineMgmt();
   if (name === 'schedule')  renderScheduleList();
@@ -2176,13 +2172,14 @@ function selectHistoryRow(event, idx) {
 
 function renderInlineCodeAnalysis(container, record) {
   const active = (record.lossCodes || []).filter(lc => lc.min > 0).sort((a, b) => b.min - a.min);
+  const factorHtml = `<div style="padding:0 12px 10px;background:var(--bg3)">${buildOeeFactorHtml([record])}</div>`;
   if (!active.length) {
-    container.innerHTML = `<div style="padding:10px 16px;color:var(--muted);font-size:12px;background:var(--bg3);border-bottom:2px solid var(--border)">손실 코드 입력 없음</div>`;
+    container.innerHTML = factorHtml + `<div style="padding:10px 16px;color:var(--muted);font-size:12px;background:var(--bg3);border-bottom:2px solid var(--border)">손실 코드 입력 없음</div>`;
     return;
   }
   const maxMin = active[0].min;
   const colors = ['var(--danger)','var(--accent2)','var(--warn)','var(--accent)','var(--accent3)','#8866ff','var(--muted)'];
-  container.innerHTML = `<div style="padding:10px 12px;background:var(--bg3);border-bottom:2px solid var(--accent);display:flex;flex-direction:column;gap:7px">
+  container.innerHTML = factorHtml + `<div style="padding:10px 12px;background:var(--bg3);border-bottom:2px solid var(--accent);display:flex;flex-direction:column;gap:7px">
     <div style="font-size:10px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:2px">🔴 손실 코드</div>
     ${active.map((lc, i) => {
       const info = LOSS_CODES.find(x => x.code === lc.code) || { name: lc.code, emoji: '⚫' };
@@ -3920,12 +3917,32 @@ function setAnalysisPeriod(p, btn) {
   analysisPeriod = p;
   document.querySelectorAll('#analysisPeriodToggle .period-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const searchEl = document.getElementById('analysisProductSearch');
-  if (searchEl) {
-    searchEl.style.display = p === 'product' ? '' : 'none';
-    if (p !== 'product') searchEl.value = '';
-  }
   renderAnalysis();
+}
+
+// ── 분석 품번 검색 필터 (주/월/연/품번별 공통 — 품번 또는 품명) ──
+function getAnalysisQuery() {
+  return (document.getElementById('analysisProductSearch')?.value || '').trim().toLowerCase();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function analysisPartMatches(partNo, q) {
+  if (!q) return true;
+  const p = PRODUCTS.find(x => x.no === partNo);
+  return (partNo || '').toLowerCase().includes(q) || (p?.name || '').toLowerCase().includes(q);
+}
+
+function getAnalysisRecords() {
+  const q = getAnalysisQuery();
+  return q ? RECORDS.filter(r => analysisPartMatches(r.partNo, q)) : RECORDS;
+}
+
+function getAnalysisProducts() {
+  const q = getAnalysisQuery();
+  return q ? PRODUCTS.filter(p => analysisPartMatches(p.no, q)) : PRODUCTS;
 }
 
 function getWeekKey(dateStr) {
@@ -3941,7 +3958,7 @@ function getWeekKey(dateStr) {
 
 function groupRecords(period) {
   const map = {};
-  RECORDS.forEach(r => {
+  getAnalysisRecords().forEach(r => {
     let k;
     if (period === 'week')    k = getWeekKey(r.date);
     else if (period === 'month')  k = r.date.slice(0,7);
@@ -4024,7 +4041,7 @@ function toggleInactiveList() {
 
 function getAnalysisKpiScope() {
   // 품번별 모드는 전체 기간
-  if (analysisPeriod === 'product') return { key: null, label: '전체 기간', recs: RECORDS };
+  if (analysisPeriod === 'product') return { key: null, label: '전체 기간', recs: getAnalysisRecords() };
   const grouped = groupRecords(analysisPeriod);
   // 차트/테이블에서 기간을 선택했으면 그 기간, 아니면 현재(이번 주/이번 달/올해)
   let key = (_selectedAnalysisKey && grouped[_selectedAnalysisKey]) ? _selectedAnalysisKey : null;
@@ -4042,10 +4059,11 @@ function getAnalysisKpiScope() {
 
 // 기간 KPI 값 계산 (실적 품번 / 미실적 품번 / 평균 OEE)
 function calcKpiStats(recs) {
+  const prods     = getAnalysisProducts();
   const activeSet = new Set(recs.map(r => r.partNo));
-  const active    = PRODUCTS.filter(p => activeSet.has(p.no)).length;
+  const active    = prods.filter(p => activeSet.has(p.no)).length;
   const oee = recs.length ? recs.reduce((a,r) => a + r.avail*r.perf*r.qual*100, 0) / recs.length : null;
-  return { activeSet, active, inactive: PRODUCTS.length - active, oee };
+  return { activeSet, active, inactive: prods.length - active, oee };
 }
 
 // 이전 기간 대비 증감 표시 (upGood: 값이 오르면 좋은 지표인지)
@@ -4062,9 +4080,11 @@ function kpiDeltaHtml(curr, prev, prevLabel, upGood, unit = '', digits = 0) {
 function renderAnalysisKpi() {
   const scope = getAnalysisKpiScope();
   const curr = calcKpiStats(scope.recs);
-  const totalProds   = PRODUCTS.length;
+  const prods        = getAnalysisProducts();
+  const totalProds   = prods.length;
   const activeProds  = curr.active;
-  const inactiveList = PRODUCTS.filter(p => !curr.activeSet.has(p.no));
+  const inactiveList = prods.filter(p => !curr.activeSet.has(p.no));
+  const query        = getAnalysisQuery();
   const totalRecs    = scope.recs.length;
   const avgOEE       = curr.oee || 0;
 
@@ -4091,7 +4111,7 @@ function renderAnalysisKpi() {
     </div>` : '';
 
   document.getElementById('analysisKpi').innerHTML = `
-    <div style="grid-column:1/-1;font-size:11px;color:var(--muted);text-align:right;margin-bottom:-4px">📌 ${scope.label}${scope.prevKey ? ` · 비교: ${scope.prevKey}` : ''}</div>
+    <div style="grid-column:1/-1;font-size:11px;color:var(--muted);text-align:right;margin-bottom:-4px">📌 ${scope.label}${scope.prevKey ? ` · 비교: ${scope.prevKey}` : ''}${query ? ` · 🔍 '${escapeHtml(query)}' 필터` : ''}</div>
     <div class="akpi-card"><div class="akpi-val" style="color:var(--accent)">${totalProds}</div><div class="akpi-lbl">🏷️ 등록 품번</div></div>
     <div class="akpi-card"><div class="akpi-val" style="color:var(--accent3)">${activeProds}</div><div class="akpi-lbl">✅ 실적 품번</div>${dActive}</div>
     <div class="akpi-card" onclick="toggleInactiveList()" style="cursor:pointer${_showInactiveList ? ';border-color:var(--warn)' : ''}" title="미실적 품번 목록 보기"><div class="akpi-val" style="color:var(--warn)">${inactiveList.length}</div><div class="akpi-lbl">⏳ 미실적 품번 ${_showInactiveList ? '▲' : '▼'}</div>${dInactive}</div>
@@ -4117,24 +4137,15 @@ function renderAnalysis() {
   const titleMap = { week:'주별 OEE 추이', month:'월별 OEE 추이', year:'연별 OEE 추이', product:'품번별 OEE 비교' };
   document.getElementById('analysisChartTitle').textContent = '📊 ' + titleMap[analysisPeriod];
 
+  // 품번 검색 필터는 groupRecords(getAnalysisRecords) 단계에서 주/월/연/품번별 모두 적용됨
   const grouped = groupRecords(analysisPeriod);
   let keys = Object.keys(grouped).sort().reverse();   // 내림차순 (최신이 맨 위)
 
-  // 품번별 검색 필터 (품번 또는 품명)
-  if (isProduct) {
-    const searchEl = document.getElementById('analysisProductSearch');
-    const q = (searchEl?.value || '').trim().toLowerCase();
-    if (q) {
-      keys = keys.filter(k => {
-        const p = PRODUCTS.find(x => x.no === k);
-        return k.toLowerCase().includes(q) || (p?.name || '').toLowerCase().includes(q);
-      });
-    }
-  }
-
-  if (isProduct && !keys.length) {
+  if (!keys.length) {
     renderAnalysisChart([], '🔍 검색 결과가 없습니다');
     document.getElementById('analysisTableBody').innerHTML = '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--muted)">🔍 검색 결과가 없습니다</td></tr>';
+    _selectedAnalysisKey = null;
+    document.getElementById('analysisDrilldown').style.display = 'none';
     return;
   }
 
@@ -4349,6 +4360,134 @@ function calcLossCodeMap(recs) {
   return map;
 }
 
+// ── OEE 저하 요인 분석 ──
+// 계획가동시간(720분 - 계획손실)을 기준으로 OEE 손실을 시간(분)으로 환산해 분해한다.
+//   가용 손실 = 계획가동 - 실가동 (설비·기타 손실코드)
+//   성능 손실 = 실가동 × (1 - 성능률)          (속도저하·순간정지)
+//   품질 손실 = 실가동 × 성능률 × (1 - 품질률)  (불량 생산에 쓴 시간)
+function calcOeeLossBreakdown(recs) {
+  const b = { plannedOp: 0, availLoss: 0, speedLoss: 0, qualLoss: 0, codeSum: 0,
+              qty: 0, defect: 0, theoQty: 0, codes: {} };
+  recs.forEach(r => {
+    const lcs = r.lossCodes || [];
+    const typeOf = lc => lc.type || LOSS_CODES.find(c => c.code === lc.code)?.type;
+    const plannedMin = lcs.filter(lc => typeOf(lc) === 'planned').reduce((a, lc) => a + (lc.min || 0), 0);
+    const plannedOp  = Math.max(0, TOTAL_MIN - plannedMin);
+    const run  = r.runMin || 0;
+    const perf = r.perf || 0, qual = r.qual || 0;
+    b.plannedOp += plannedOp;
+    b.availLoss += Math.max(0, plannedOp - run);
+    b.speedLoss += run * (1 - perf);
+    b.qualLoss  += run * perf * (1 - qual);
+    b.qty    += r.qty || 0;
+    b.defect += r.defect || 0;
+    if (r.ct > 0) b.theoQty += run * 60 / r.ct;
+    lcs.forEach(lc => {
+      if (!lc.min || typeOf(lc) === 'planned') return;
+      if (!b.codes[lc.code]) b.codes[lc.code] = { min: 0, notes: [] };
+      b.codes[lc.code].min += lc.min;
+      b.codeSum += lc.min;
+      const n = (lc.note || '').trim();
+      if (n && !b.codes[lc.code].notes.includes(n)) b.codes[lc.code].notes.push(n);
+    });
+  });
+  b.total = b.availLoss + b.speedLoss + b.qualLoss;
+  b.codeList = Object.entries(b.codes).map(([code, v]) => ({ code, ...v })).sort((a, c) => c.min - a.min);
+  return b;
+}
+
+function getOeeFactors(b) {
+  const topCode = b.codeList[0];
+  const topInfo = topCode ? (LOSS_CODES.find(c => c.code === topCode.code) || { name: topCode.code, emoji: '⚫' }) : null;
+  const defRate = b.qty > 0 ? b.defect / b.qty * 100 : 0;
+  return [
+    { key: 'avail', label: '⏱️ 가용 손실', col: 'var(--accent)',  min: b.availLoss,
+      reason: topInfo ? `${topInfo.emoji} ${topInfo.name} ${topCode.min}분${topCode.notes.length ? ` (${topCode.notes.join(' / ')})` : ''}` : '설비정지·비가동' },
+    { key: 'perf',  label: '⚡ 성능 손실', col: 'var(--accent2)', min: b.speedLoss,
+      reason: b.theoQty > 0 ? `속도저하·순간정지 — 실생산 ${b.qty.toLocaleString()}개 / 이론 ${Math.round(b.theoQty).toLocaleString()}개` : '속도저하·순간정지' },
+    { key: 'qual',  label: '✅ 품질 손실', col: 'var(--accent3)', min: b.qualLoss,
+      reason: `불량 ${b.defect.toLocaleString()}개 (불량률 ${defRate.toFixed(2)}%)` },
+  ].sort((a, c) => c.min - a.min);
+}
+
+function buildOeeFactorHtml(recs) {
+  const b = calcOeeLossBreakdown(recs);
+  const header = `<div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin:14px 0 8px">🩺 OEE 저하 요인</div>`;
+  if (b.total < 0.5) return header + `<div style="text-align:center;padding:12px;color:var(--accent3);font-size:12px">✅ 손실 요인 없음</div>`;
+
+  const factors = getOeeFactors(b);
+  const main = factors[0];
+  const mainShare = Math.round(main.min / b.total * 100);
+  const verdict = `<div style="padding:10px 12px;background:var(--bg2);border-left:3px solid ${main.col};border-radius:0 8px 8px 0;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:${main.col}">주요 원인: ${main.label} <span style="font-size:11px;color:var(--muted);font-weight:400">· 전체 손실의 ${mainShare}%</span></div>
+      <div style="font-size:12px;color:var(--text);margin-top:3px">${main.reason}</div>
+    </div>`;
+
+  const rows = factors.map(f => {
+    const share = Math.round(f.min / b.total * 100);
+    let sub = '';
+    if (f.key === 'avail' && f.min >= 0.5) {
+      const unassigned = Math.round(b.availLoss - b.codeSum);
+      const codeRows = b.codeList.slice(0, 4).map(c => {
+        const info = LOSS_CODES.find(x => x.code === c.code) || { name: c.code, emoji: '⚫', color: '#6b7fa3' };
+        const note = c.notes.length ? `<span style="color:var(--muted)"> · ${c.notes.join(' / ')}</span>` : '';
+        return `<div style="display:flex;gap:6px;font-size:11px"><span>${info.emoji}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${info.name}${note}</span><span style="font-family:'JetBrains Mono',monospace;color:${info.color || 'var(--text)'};flex-shrink:0">${c.min}분</span></div>`;
+      }).join('');
+      const unassignedRow = unassigned >= 1
+        ? `<div style="display:flex;gap:6px;font-size:11px;color:var(--muted)"><span>❔</span><span style="flex:1">미분류 정지 (손실코드 미입력)</span><span style="font-family:'JetBrains Mono',monospace;flex-shrink:0">${unassigned}분</span></div>` : '';
+      if (codeRows || unassignedRow) sub = `<div style="margin:5px 0 0 12px;display:flex;flex-direction:column;gap:3px">${codeRows}${unassignedRow}</div>`;
+    } else if (f.min >= 0.5) {
+      sub = `<div style="margin:4px 0 0 12px;font-size:11px;color:var(--muted)">${f.reason}</div>`;
+    }
+    return `<div style="margin-bottom:9px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:88px;flex-shrink:0;font-size:12px;font-weight:700;color:${f.col}">${f.label}</span>
+        <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${share}%;background:${f.col};border-radius:4px"></div>
+        </div>
+        <span style="width:56px;flex-shrink:0;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700">${Math.round(f.min)}분</span>
+        <span style="width:34px;flex-shrink:0;text-align:right;font-size:11px;color:var(--muted)">${share}%</span>
+      </div>
+      ${sub}
+    </div>`;
+  }).join('');
+
+  return header + verdict + rows +
+    `<div style="font-size:10px;color:var(--muted);margin-top:2px">※ 계획가동 ${Math.round(b.plannedOp).toLocaleString()}분 중 손실을 시간(분)으로 환산 · 계획손실(식사·청소 등) 제외</div>`;
+}
+
+// ── OEE 낮은 실적 목록 (클릭 시 해당 실적의 저하 요인 펼침) ──
+function buildLowOeeRecordsHtml(recs) {
+  if (recs.length < 2) return '';
+  const low = recs.map(r => ({ r, oee: r.avail * r.perf * r.qual * 100 }))
+    .filter(x => x.oee < 85).sort((a, b) => a.oee - b.oee).slice(0, 10);
+  const header = `<div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin:14px 0 8px">⚠️ OEE 목표 미달 실적 <span style="font-weight:400;letter-spacing:0">(낮은순 · 클릭 시 저하 요인)</span></div>`;
+  if (!low.length) return header + `<div style="text-align:center;padding:12px;color:var(--accent3);font-size:12px">🎉 모든 실적이 목표(85%) 이상입니다</div>`;
+  const rows = low.map(({ r, oee }) => {
+    const idx = RECORDS.indexOf(r);
+    const main = getOeeFactors(calcOeeLossBreakdown([r]))[0];
+    return `<div class="hist-row" onclick="toggleLowOeeRecord(${idx})" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid var(--border);font-size:12px">
+        <span style="font-family:'JetBrains Mono',monospace;flex-shrink:0">${r.date}</span>
+        <span style="color:var(--muted);flex-shrink:0">${r.shift || ''}</span>
+        <span style="font-family:'JetBrains Mono',monospace;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.partNo}</span>
+        <span style="font-size:11px;color:${main.col};flex-shrink:0">${main.label}</span>
+        <span class="${oeeClass(oee)}" style="font-family:'JetBrains Mono',monospace;font-weight:700;min-width:48px;text-align:right;flex-shrink:0">${oee.toFixed(1)}%</span>
+      </div>
+      <div id="low-oee-detail-${idx}" style="display:none;padding:0 10px 10px;background:var(--bg2);border-bottom:1px solid var(--border)"></div>`;
+  }).join('');
+  return header + `<div>${rows}</div>`;
+}
+
+function toggleLowOeeRecord(idx) {
+  const el = document.getElementById('low-oee-detail-' + idx);
+  if (!el) return;
+  const open = el.style.display === 'none';
+  document.querySelectorAll('[id^="low-oee-detail-"]').forEach(x => { x.style.display = 'none'; });
+  if (!open || !RECORDS[idx]) return;
+  el.innerHTML = buildOeeFactorHtml([RECORDS[idx]]);
+  el.style.display = 'block';
+}
+
 function showAnalysisDrilldown(key) {
   _selectedAnalysisKey = (_selectedAnalysisKey === key) ? null : key;
   renderAnalysis();
@@ -4455,7 +4594,9 @@ function renderDrilldownPanel(key) {
     </div>
     <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-bottom:8px">📊 지표 비교</div>
     <div class="drill-metrics">${metricsHtml}</div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+    ${buildOeeFactorHtml(currRecs)}
+    ${buildLowOeeRecordsHtml(currRecs)}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 6px">
       <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px">🔻 손실코드 분석</div>
       <select class="dash-filter-select" style="font-size:11px;padding:3px 6px;width:auto" onchange="setLossCodeSort(this.value)">
         <option value="cur_desc"${_lossCodeSortMode==='cur_desc'?' selected':''}>⏱️ 시간 많은순</option>

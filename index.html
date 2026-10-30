@@ -401,7 +401,10 @@ optgroup{color:var(--muted);font-style:normal}
 <div class="page active" id="page-lines">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
     <div class="section-title" style="margin-bottom:0">🏭 라인 가동현황</div>
-    <div style="font-size:11px;color:var(--muted)">갱신: <span id="lineStatusUpdated">-</span></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="worker-add-btn" onclick="openWorkerLogModal()" style="border-style:solid;color:var(--accent);border-color:var(--accent)">👷 작업자 이력</button>
+      <div style="font-size:11px;color:var(--muted)">갱신: <span id="lineStatusUpdated">-</span></div>
+    </div>
   </div>
   <!-- 자동 전환 컨트롤 -->
   <div class="slide-ctrl">
@@ -1039,6 +1042,32 @@ optgroup{color:var(--muted);font-style:normal}
   </div>
 </div>
 
+<!-- 작업자 이력 검색 모달 -->
+<div class="modal-overlay" id="workerLogModal" style="display:none;align-items:flex-start;overflow-y:auto">
+  <div class="modal-box" style="border:1px solid var(--accent);box-shadow:0 0 40px rgba(0,212,255,0.12);margin:auto;max-width:560px">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--accent)">👷 작업자 이력 검색</div>
+      <button class="modal-close" onclick="closeWorkerLogModal()">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <input type="text" class="field-input" id="workerLogName" autocomplete="off" placeholder="🔍 작업자명 (일부만 입력해도 검색, 비우면 전체)" oninput="renderWorkerLog()">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input type="date" class="field-input" id="workerLogFrom" style="flex:1;min-width:130px;padding:8px 10px" onchange="renderWorkerLog()">
+        <span style="color:var(--muted)">~</span>
+        <input type="date" class="field-input" id="workerLogTo" style="flex:1;min-width:130px;padding:8px 10px" onchange="renderWorkerLog()">
+      </div>
+      <div class="period-toggle" id="workerLogRangeBtns" style="margin-bottom:0">
+        <button class="period-btn" data-days="0" onclick="setWorkerLogRange(0)">📍 오늘</button>
+        <button class="period-btn" data-days="7" onclick="setWorkerLogRange(7)">7일</button>
+        <button class="period-btn" data-days="30" onclick="setWorkerLogRange(30)">30일</button>
+        <button class="period-btn" data-days="90" onclick="setWorkerLogRange(90)">90일</button>
+      </div>
+      <select class="field-input" id="workerLogLine" style="padding:8px 10px" onchange="renderWorkerLog()"></select>
+      <div id="workerLogResult" style="max-height:60vh;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
 <!-- 삭제 확인 모달 (공용) -->
 <div class="modal-overlay" id="deleteModal">
   <div class="delete-modal-box" style="border:1px solid var(--danger);box-shadow:0 0 40px rgba(255,64,96,0.2)">
@@ -1210,6 +1239,7 @@ if (FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY') {
 let PRODUCTS  = [];
 let RECORDS   = [];
 let SCHEDULES = [];
+let WORK_LOGS = []; // 작업자 배치 이력 — { date, worker, lineId, lineName, partNos, firstAt, lastAt }
 
 // type: loss=설비손실(OEE↓) / planned=계획손실(OEE제외) / other=기타손실(OEE↓)
 let LOSS_CODES = [
@@ -1327,6 +1357,53 @@ function deleteScheduleFromFirebase(key) {
     .catch(e => console.warn('[Firebase] 일정 삭제 실패:', e));
 }
 
+// 작업자 배치 이력 — 키를 "근무일_라인_작업자"로 고정하고, 그 안에 배치~종료 구간(segments)을 쌓는다.
+// 같은 날 A라인 → B라인 → A라인처럼 오가도 라인별 구간이 시간순으로 남아 이동 경로를 복원할 수 있다.
+function _workLogSegments(w) {
+  if (Array.isArray(w.segments)) return w.segments;
+  return w.firstAt ? [{ in: w.firstAt }] : []; // 구간 도입 전 이력 호환
+}
+
+function _saveWorkLog(entry) {
+  localStorage.setItem('mc_work_logs', JSON.stringify(WORK_LOGS));
+  if (!fbDB) return;
+  const { _key, ...data } = entry;
+  fbDB.ref(FB_REF + '/workLogs/' + _key).set(data)
+    .catch(e => console.warn('[Firebase] 작업자 이력 저장 실패:', e));
+}
+
+// 배치(시작) 기록 — 이미 진행 중인 구간이 있으면 새 구간을 만들지 않는다
+function logWorkerAssignment(line, worker, at) {
+  if (!line || !worker) return;
+  const date = workDateStr();
+  const key  = `${date}_${line.id}_${worker}`.replace(/[.#$\[\]\/]/g, '_');
+  const now  = at || new Date().toISOString();
+  let entry = WORK_LOGS.find(w => w._key === key);
+  if (!entry) {
+    entry = { _key: key, date, worker, lineId: line.id, firstAt: now, segments: [] };
+    WORK_LOGS.push(entry);
+  }
+  entry.segments = _workLogSegments(entry);
+  Object.assign(entry, { lineName: line.name, partNos: line.partNos || [], lastAt: now });
+  const last = entry.segments[entry.segments.length - 1];
+  if (!last || last.out) entry.segments.push({ in: now });
+  _saveWorkLog(entry);
+}
+
+// 종료 기록 — 오늘(근무일) 진행 중인 구간만 닫는다 (전날 이력은 종료 미기록으로 남김)
+function endWorkerAssignment(line, worker) {
+  if (!line || !worker) return;
+  const key   = `${workDateStr()}_${line.id}_${worker}`.replace(/[.#$\[\]\/]/g, '_');
+  const entry = WORK_LOGS.find(w => w._key === key);
+  if (!entry) return;
+  entry.segments = _workLogSegments(entry);
+  const last = entry.segments[entry.segments.length - 1];
+  if (!last || last.out) return;
+  last.out = new Date().toISOString();
+  entry.lastAt = last.out;
+  _saveWorkLog(entry);
+}
+
 function _applyLocal() {
   const p = localStorage.getItem('mc_products');
   const r = localStorage.getItem('mc_records');
@@ -1340,6 +1417,8 @@ function _applyLocal() {
   if (l)  LINES      = JSON.parse(l);
   if (dr) DRAFTS     = JSON.parse(dr);
   if (sc) SCHEDULES  = JSON.parse(sc);
+  const wl = localStorage.getItem('mc_work_logs');
+  if (wl) WORK_LOGS  = JSON.parse(wl);
   // 과거(키 없는) 형식으로 저장된 로컬 레코드에 임시 키 부여 (fbDB 연결 시 마이그레이션에서 실제 키로 교체됨)
   RECORDS   = RECORDS.map((r, i) => r._key ? r : { ...r, _key: 'legacy-' + i });
   SCHEDULES = SCHEDULES.map((s, i) => s._key ? s : { ...s, _key: 'legacy-' + i });
@@ -1356,6 +1435,14 @@ function loadData(callback) {
       if (Array.isArray(d.lines))     LINES      = d.lines;
       if (Array.isArray(d.drafts))    DRAFTS     = d.drafts;
       if (d.schedules)                SCHEDULES  = _recordsObjToArray(d.schedules);
+      if (d.workLogs) {
+        WORK_LOGS = _recordsObjToArray(d.workLogs);
+        localStorage.setItem('mc_work_logs', JSON.stringify(WORK_LOGS));
+      } else {
+        // Firebase에 아직 이력이 없으면 로컬에 쌓인 이력을 유지
+        const wl = localStorage.getItem('mc_work_logs');
+        if (wl) WORK_LOGS = JSON.parse(wl);
+      }
       if (d.slideState) {
         _slideActive   = !!d.slideState.active;
         _slideInterval = d.slideState.interval || 10;
@@ -1483,6 +1570,18 @@ function setupRealtimeSync() {
     }
   });
   setTimeout(() => { _schedulesSyncReady = true; }, 3000);
+
+  // workLogs(작업자 배치 이력)도 child 단위로 감지 — 화면은 모달을 열 때 다시 그리므로 데이터만 갱신
+  const _upsertWorkLog = snap => {
+    const data = snap.val();
+    if (!data) return;
+    const idx = WORK_LOGS.findIndex(w => w._key === snap.key);
+    if (idx !== -1) WORK_LOGS[idx] = { ...data, _key: snap.key };
+    else WORK_LOGS.push({ ...data, _key: snap.key });
+    localStorage.setItem('mc_work_logs', JSON.stringify(WORK_LOGS));
+  };
+  fbDB.ref(FB_REF + '/workLogs').on('child_added', _upsertWorkLog);
+  fbDB.ref(FB_REF + '/workLogs').on('child_changed', _upsertWorkLog);
 
   fbDB.ref(FB_REF + '/drafts').on('value', snap => {
     if (Date.now() - _lastDraftSave < 5000) return;
@@ -3017,6 +3116,9 @@ function setLineStatus(idx, status) {
   if (!LINES[idx]) return;
   LINES[idx].status   = status;
   LINES[idx].statusAt = new Date().toISOString();
+  if (status === 'running') (LINES[idx].workers || []).forEach(w => logWorkerAssignment(LINES[idx], w));
+  if (status === 'stopped' || status === 'idle') (LINES[idx].workers || []).forEach(w => endWorkerAssignment(LINES[idx], w));
+  if (status === 'idle') LINES[idx].workers = []; // 비가동 전환 시 작업자 자동 해제 (이력은 위에서 종료 기록됨)
   saveData();
   if (status === 'running') autoDeleteSchedulesForLine(LINES[idx]);
   renderSlicedLineStatus();
@@ -3059,16 +3161,196 @@ function confirmAddWorker(idx) {
   if (!LINES[idx]) return;
   if (!Array.isArray(LINES[idx].workers)) LINES[idx].workers = [];
   if (LINES[idx].workers.includes(name)) { showToast('⚠️ 이미 등록된 작업자'); return; }
+  // 다른 라인에 이미 배치된 작업자면 이동 여부 확인 — 이동 시 이전 라인에서 빼고 그 라인 근무를 종료 처리
+  const others = LINES.filter((l, i) => i !== idx && (l.workers || []).includes(name));
+  if (others.length && confirm(`👷 ${name} 작업자가 ${others.map(l => l.name).join(', ')}에 배치되어 있습니다.\n\n[확인] 이 라인으로 이동 (이전 라인에서 제거)\n[취소] 두 라인 모두 유지`)) {
+    others.forEach(l => {
+      endWorkerAssignment(l, name);
+      l.workers = l.workers.filter(w => w !== name);
+    });
+  }
   LINES[idx].workers.push(name);
+  // 이력은 가동중 라인에 등록된 경우만 남긴다 (가동 전 미리 등록한 작업자는 '가동중' 전환 시 기록됨)
+  if (LINES[idx].status === 'running') logWorkerAssignment(LINES[idx], name);
   saveData();
   renderSlicedLineStatus();
 }
 
 function removeWorker(idx, wi) {
   if (!LINES[idx] || !Array.isArray(LINES[idx].workers)) return;
+  endWorkerAssignment(LINES[idx], LINES[idx].workers[wi]);
   LINES[idx].workers.splice(wi, 1);
   saveData();
   renderSlicedLineStatus();
+}
+
+// ──────────────────────────────
+//  작업자 이력 검색
+// ──────────────────────────────
+// 근무일 기준 날짜 — 가동현황이 08:00에 초기화되므로 08시 이전(야간 근무)은 전날로 본다
+function workDateStr(d = new Date()) {
+  const t = new Date(d);
+  if (t.getHours() < 8) t.setDate(t.getDate() - 1);
+  return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+}
+
+// 이력 기능 도입 전부터 카드에 배치돼 있던 작업자 등, 오늘 기록이 빠진 가동중 라인 작업자를 보충 기록한다.
+// 라인이 오늘 가동 상태로 바뀌었다면 그 시각(statusAt)을 시작 시각으로 쓴다.
+function backfillCurrentWorkLogs() {
+  const today = workDateStr();
+  LINES.forEach(line => {
+    if (line.status !== 'running') return;
+    const at = line.statusAt && workDateStr(new Date(line.statusAt)) === today ? line.statusAt : undefined;
+    (line.workers || []).forEach(w => {
+      const key = `${today}_${line.id}_${w}`.replace(/[.#$\[\]\/]/g, '_');
+      if (!WORK_LOGS.some(x => x._key === key)) logWorkerAssignment(line, w, at);
+    });
+  });
+}
+
+function openWorkerLogModal() {
+  backfillCurrentWorkLogs();
+
+  const lineSel = document.getElementById('workerLogLine');
+  const prevLine = lineSel.value;
+  lineSel.innerHTML = `<option value="">🏭 전체 라인</option>` +
+    LINES.map(l => `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`).join('');
+  lineSel.value = prevLine;
+
+  if (!document.getElementById('workerLogFrom').value) setWorkerLogRange(30, true);
+  document.getElementById('workerLogModal').style.display = 'flex';
+  navPushModal('workerLogModal');
+  renderWorkerLog();
+}
+
+function closeWorkerLogModal() {
+  navCloseModal();
+  document.getElementById('workerLogModal').style.display = 'none';
+}
+
+function workerLogRangeFrom(days) {
+  const from = new Date(workDateStr() + 'T12:00:00'); // 정오 기준이라 workDateStr의 08시 보정에 걸리지 않음
+  from.setDate(from.getDate() - days);
+  return workDateStr(from);
+}
+
+function setWorkerLogRange(days, silent) {
+  document.getElementById('workerLogTo').value = workDateStr();
+  document.getElementById('workerLogFrom').value = workerLogRangeFrom(days);
+  if (!silent) renderWorkerLog();
+}
+
+// 현재 선택된 기간과 일치하는 빠른 기간 버튼만 활성 표시 (날짜를 직접 바꾸면 자동으로 해제)
+function syncWorkerLogRangeBtns() {
+  const from = document.getElementById('workerLogFrom').value;
+  const to   = document.getElementById('workerLogTo').value;
+  document.querySelectorAll('#workerLogRangeBtns .period-btn').forEach(b => {
+    b.classList.toggle('active', to === workDateStr() && from === workerLogRangeFrom(+b.dataset.days));
+  });
+}
+
+// 가동중 라인 카드에 등록된 배치 이력(WORK_LOGS)만 "근무일 | 작업자 | 라인" 단위로 묶는다
+function collectWorkerLogRows() {
+  const q      = (document.getElementById('workerLogName').value || '').trim().toLowerCase();
+  const from   = document.getElementById('workerLogFrom').value || '0000-00-00';
+  const to     = document.getElementById('workerLogTo').value   || '9999-99-99';
+  const lineF  = document.getElementById('workerLogLine').value;
+  const map = {};
+  const add = (date, worker, lineName, partNos) => {
+    if (!date || !worker || date < from || date > to) return null;
+    if (q && !worker.toLowerCase().includes(q)) return null;
+    if (lineF && lineName !== lineF) return null;
+    const k = `${date}|${worker}|${lineName}`;
+    if (!map[k]) map[k] = { date, worker, lineName, partNos: new Set(), segments: [], current: null };
+    partNos.forEach(p => map[k].partNos.add(p));
+    return map[k];
+  };
+
+  WORK_LOGS.forEach(w => {
+    const row = add(w.date, w.worker, w.lineName || '미배정', w.partNos || []);
+    if (row) row.segments.push(..._workLogSegments(w));
+  });
+  // 기록이 있는 오늘 행 중 지금도 가동중·수리대기 라인에 배치된 작업자만 "현재" 표시 (행을 새로 만들지는 않음)
+  const today = workDateStr();
+  LINES.forEach(line => {
+    if (line.status !== 'running' && line.status !== 'waiting') return;
+    (line.workers || []).forEach(w => {
+      const row = map[`${today}|${w}|${line.name}`];
+      if (row) row.current = LINE_STATUS_CFG[line.status];
+    });
+  });
+  Object.values(map).forEach(r => r.segments.sort((a, b) => a.in.localeCompare(b.in)));
+  return Object.values(map).sort((a, b) =>
+    b.date.localeCompare(a.date) || a.worker.localeCompare(b.worker) || a.lineName.localeCompare(b.lineName));
+}
+
+function renderWorkerLog() {
+  const el = document.getElementById('workerLogResult');
+  if (!el) return;
+  syncWorkerLogRangeBtns();
+  const rows = collectWorkerLogRows();
+  if (!rows.length) {
+    el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--muted)">📭 해당 조건의 작업 이력이 없습니다</div>`;
+    return;
+  }
+
+  // 요약 — 작업자별 근무일수, 라인별 근무일수
+  const workerDays = {}, lineDays = {};
+  rows.forEach(r => {
+    (workerDays[r.worker] ||= new Set()).add(r.date);
+    (lineDays[r.lineName] ||= new Set()).add(r.date);
+  });
+  const chip = (txt, col) => `<span style="font-size:11px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:2px 8px;color:${col}">${txt}</span>`;
+  const workerNames = Object.keys(workerDays);
+  const summary = `<div style="display:flex;flex-direction:column;gap:6px;padding:10px;background:var(--bg3);border-radius:8px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:var(--accent)">📊 작업자 ${workerNames.length}명 · ${new Set(rows.map(r => r.date)).size}일 · ${rows.length}건</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${Object.entries(lineDays).sort((a, b) => b[1].size - a[1].size)
+        .map(([n, s]) => chip(`🏭 ${escapeHtml(n)} ${s.size}일`, 'var(--text)')).join('')}</div>
+      ${workerNames.length <= 20 ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${Object.entries(workerDays).sort((a, b) => b[1].size - a[1].size)
+        .map(([n, s]) => chip(`👤 ${escapeHtml(n)} ${s.size}일`, 'var(--accent)')).join('')}</div>` : ''}
+    </div>`;
+
+  const WEEK = ['일','월','화','수','목','금','토'];
+  const hm = iso => { const t = new Date(iso); return `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`; };
+  const segText = s => `${hm(s.in)}~${s.out ? hm(s.out) : ''}`;
+  const byDate = {};
+  rows.slice(0, 500).forEach(r => (byDate[r.date] ||= []).push(r));
+  const list = Object.entries(byDate).map(([date, list]) => {
+    const wd = WEEK[new Date(date + 'T00:00:00').getDay()];
+    // 작업자별로 묶고, 라인은 배치 시각 순
+    const byWorker = {};
+    list.forEach(r => (byWorker[r.worker] ||= []).push(r));
+    const items = Object.entries(byWorker).map(([worker, wRows]) => {
+      wRows.sort((a, b) => (a.segments[0]?.in || '~').localeCompare(b.segments[0]?.in || '~'));
+      // 이동 경로 — 모든 라인 구간을 시간순으로 펼친다 (2개 구간 이상일 때만 표시)
+      const route = wRows.flatMap(r => r.segments.map(s => ({ s, line: r.lineName })))
+        .sort((a, b) => a.s.in.localeCompare(b.s.in));
+      const routeHtml = route.length >= 2
+        ? `<div style="font-size:11px;color:var(--accent2);padding:0 8px 6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">🔀 ${route
+            .map(({ s, line }) => `<span style="background:var(--bg3);border-radius:6px;padding:1px 6px;color:var(--text)">${escapeHtml(line)} <span style="font-family:'JetBrains Mono',monospace;color:var(--muted)">${segText(s)}</span></span>`)
+            .join('<span style="color:var(--muted)">→</span>')}</div>` : '';
+      const lineRows = wRows.map(r => {
+        const tags = [];
+        if (r.current) tags.push(`<span style="color:${r.current.color}">📍 현재 배치 (${r.current.icon} ${r.current.label})</span>`);
+        if (r.segments.length) tags.push(`<span style="color:var(--accent3);font-family:'JetBrains Mono',monospace">👷 ${r.segments.map(segText).join(', ')}</span>`);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:3px 8px 3px 18px;font-size:12px;flex-wrap:wrap">
+            <span style="font-weight:600">🏭 ${escapeHtml(r.lineName)}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${[...r.partNos].map(escapeHtml).join(' · ')}</span>
+            <span style="font-size:11px;display:flex;gap:6px;flex-wrap:wrap">${tags.join('')}</span>
+          </div>`;
+      }).join('');
+      return `<div style="padding:6px 0 4px;border-bottom:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:700;color:var(--accent);padding:0 8px 3px">👤 ${escapeHtml(worker)}${wRows.length > 1 ? ` <span style="font-size:10px;color:var(--accent2);font-weight:400">· ${wRows.length}개 라인</span>` : ''}</div>
+          ${routeHtml}${lineRows}
+        </div>`;
+    }).join('');
+    return `<div style="margin-bottom:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--text);padding:4px 2px;font-family:'JetBrains Mono',monospace">📅 ${date} (${wd})</div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden">${items}</div>
+      </div>`;
+  }).join('');
+  const more = rows.length > 500 ? `<div style="text-align:center;padding:8px;color:var(--muted);font-size:11px">… 최근 500건만 표시 (기간을 좁혀주세요)</div>` : '';
+  el.innerHTML = summary + list + more;
 }
 
 // ──────────────────────────────
@@ -4783,11 +5065,13 @@ function resetAllLineStatuses() {
       line.statusAt = new Date().toISOString();
       changed = true;
     }
+    // 비가동 = 작업자 없음 — 초기화 시각은 실제 퇴근 시각이 아니므로 이력 종료 기록은 남기지 않는다
+    if (line.workers && line.workers.length) { line.workers = []; changed = true; }
   });
   if (changed) {
     saveData();
     renderLineStatus();
-    showToast('🌅 08:00 가동현황 비가동 초기화');
+    showToast('🌅 08:00 가동현황 비가동 초기화 (작업자 해제)');
   }
 }
 
@@ -4812,7 +5096,7 @@ function scheduleLineStatusReset() {
 // ══════════════════════════════════════
 let _navIgnorePop = false;     // 코드에서 직접 history.back()을 호출했을 때 popstate 중복 처리 방지
 let _navCurrentPage = 'lines'; // 현재 활성 탭 (popstate 복원용)
-const ALL_MODAL_IDS = ['productModal','codeModal','recordEditModal','lineModal','deleteModal','timeWarnModal'];
+const ALL_MODAL_IDS = ['productModal','codeModal','recordEditModal','lineModal','deleteModal','timeWarnModal','workerLogModal'];
 
 function navGetOpenModalId() {
   for (const id of ALL_MODAL_IDS) {
@@ -4890,6 +5174,11 @@ document.addEventListener('DOMContentLoaded', () => {
         delete l.worker;
       }
     });
+    // 비가동 라인에 남아 있던 작업자 정리 (비가동 = 작업자 없음)
+    if (LINES.some(l => (l.status || 'idle') === 'idle' && l.workers.length)) {
+      LINES.forEach(l => { if ((l.status || 'idle') === 'idle') l.workers = []; });
+      saveData();
+    }
     renderCodeTable();
     renderCodeList();
     renderProductList();

@@ -221,6 +221,11 @@ optgroup{color:var(--muted);font-style:normal}
 
 /* LINE STATUS */
 .line-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;transition:border-color .3s}
+/* 수리대기 장시간(30분 이상) 경고 — 카드 테두리 깜빡임 */
+@keyframes wait-blink{0%,100%{box-shadow:0 0 0 2px var(--danger)}50%{box-shadow:0 0 0 2px transparent}}
+.line-card.wait-long{animation:wait-blink 1.2s ease-in-out infinite}
+.wait-timer{font-family:'JetBrains Mono',monospace;font-weight:700}
+.line-card.wait-long .wait-timer{color:var(--danger)}
 .line-status-banner{padding:10px 14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
 .line-card-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
 .line-status-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
@@ -249,6 +254,12 @@ optgroup{color:var(--muted);font-style:normal}
 /* PAGES */
 .page{display:none}
 .page.active{display:block}
+
+/* SWIPE (좌우 스와이프로 탭/슬라이드 이동 시 들어오는 효과) */
+@keyframes swipe-from-right{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+@keyframes swipe-from-left{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:none}}
+.swipe-in-right{animation:swipe-from-right .22s ease-out}
+.swipe-in-left{animation:swipe-from-left .22s ease-out}
 
 /* AUTO SLIDE */
 .slide-ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px}
@@ -363,7 +374,7 @@ optgroup{color:var(--muted);font-style:normal}
 
 <!-- ══ UPDATE BANNER ══ -->
 <div id="updateBanner" style="display:none">
-  <div class="update-banner-title">🆕 업데이트 내용</div>
+  <div class="update-banner-title" id="updateBannerTitle">🆕 업데이트 내용</div>
   <ul class="update-notes" id="updateNotesList"></ul>
   <div class="update-banner-btns">
     <button class="update-apply-btn" onclick="applyUpdate()">🔄 지금 업데이트</button>
@@ -383,6 +394,7 @@ optgroup{color:var(--muted);font-style:normal}
     <div id="exportMenu">
       <button class="export-item" onclick="exportCurrentPage('html')">🌐 HTML 다운로드</button>
       <button class="export-item" onclick="exportCurrentPage('pdf')">📄 PDF 저장 (인쇄)</button>
+      <button class="export-item" onclick="exportCurrentPage('csv')">📊 엑셀 (CSV)</button>
     </div>
   </div>
   <button id="themeToggle" onclick="toggleTheme()"
@@ -557,6 +569,9 @@ optgroup{color:var(--muted);font-style:normal}
     <div class="stat-mini"><div class="stat-mini-val" style="color:var(--warn)" id="dDefectRate">-</div><div class="stat-mini-lbl">⚠️ 불량률</div></div>
   </div>
 
+  <!-- 오늘 계획 대비 실적 -->
+  <div id="dashPlanSection"></div>
+
   <!-- 최근 실적 -->
   <div class="section-title">📋 최근 실적</div>
   <div class="tbl-scroll">
@@ -590,6 +605,17 @@ optgroup{color:var(--muted);font-style:normal}
   <div style="font-size:11px;color:var(--muted);padding:4px 4px 0;line-height:1.5">
     🛟 실적 복구는 Firebase 콘솔에서 내보낸 records 데이터를 <b>기존 실적을 절대 지우지 않고</b> 빠진 항목만 추가합니다.
     데이터가 사라졌을 때 백업 JSON으로 되살릴 때 사용하세요.
+  </div>
+  <div class="section-title" style="margin-top:20px">🛡️ 데이터 보호</div>
+  <div class="form-card" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px">
+    <button class="btn btn-sm" onclick="openBackupModal()" style="padding:12px;font-size:13px;justify-content:center;color:var(--accent3);border-color:var(--accent3)">🗄️ 자동 백업 · 복원</button>
+    <button class="btn btn-sm" onclick="openAuditModal()" style="padding:12px;font-size:13px;justify-content:center;color:var(--accent);border-color:var(--accent)">📜 변경 기록</button>
+    <button class="btn btn-sm" onclick="openPinSetup()" style="padding:12px;font-size:13px;justify-content:center;color:var(--warn);border-color:var(--warn)">🔐 관리자 PIN 설정</button>
+    <button class="btn btn-sm" onclick="setDeviceName()" style="padding:12px;font-size:13px;justify-content:center">📱 이 기기 이름: <span id="deviceNameLabel"></span></button>
+  </div>
+  <div style="font-size:11px;color:var(--muted);padding:4px 4px 0;line-height:1.5">
+    🔐 PIN을 설정하면 🏷️품번 · 🔢코드 · 🔧라인관리 화면에 들어갈 때 PIN을 묻습니다 (입력 후 10분간 유지 · 가져오기·전체 복원도 PIN 필요).
+    📱 기기 이름은 변경 기록에 "누가(어느 기기에서)" 바꿨는지 표시하는 데 쓰입니다.
   </div>
   </div>
 </div>
@@ -699,6 +725,10 @@ optgroup{color:var(--muted);font-style:normal}
         <input type="number" class="field-input" id="inputGood" placeholder="자동계산" readonly style="background:var(--bg3);color:var(--accent3)">
       </div>
     </div>
+    <details id="defectTypeWrap" style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--danger)">🧪 불량 유형별 수량 <span style="font-weight:400;color:var(--muted);font-size:11px">(입력하면 불량수량이 자동 합산)</span> <span id="defectTypeSum" style="font-family:'JetBrains Mono',monospace"></span></summary>
+      <div id="defectTypeInputs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px"></div>
+    </details>
   </div>
 
   <!-- 시간 코드 -->
@@ -833,6 +863,14 @@ optgroup{color:var(--muted);font-style:normal}
     <button class="btn btn-sm" id="codeCollapseBtn" onclick="toggleCodeList()" style="padding:10px 14px;white-space:nowrap;font-size:13px">▲ 접기</button>
   </div>
   <div id="codeList"></div>
+
+  <div class="section-title" style="margin-top:20px">🧪 불량 유형 코드</div>
+  <div style="font-size:11px;color:var(--muted);margin:-6px 0 10px">실적 입력 시 불량 수량을 유형별로 나눠 입력 → 분석에서 불량 파레토로 확인</div>
+  <div style="display:flex;gap:8px;margin-bottom:10px">
+    <input type="text" class="field-input" id="defectCodeNameInput" placeholder="불량 유형명 (예: 버 발생)" autocomplete="off" style="flex:1" onkeydown="if(event.key==='Enter')addDefectCode()">
+    <button class="btn btn-primary" onclick="addDefectCode()" style="width:auto;padding:10px 16px">➕ 추가</button>
+  </div>
+  <div id="defectCodeList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
 </div>
 
 <!-- ══════════════════════════════════════
@@ -1002,6 +1040,10 @@ optgroup{color:var(--muted);font-style:normal}
           <input type="number" class="field-input" id="editDefect" oninput="calcEditOEE()" style="color:var(--danger)">
         </div>
       </div>
+      <details id="editDefectTypeWrap">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--danger)">🧪 불량 유형별 수량 <span id="editDefectTypeSum" style="font-family:'JetBrains Mono',monospace"></span></summary>
+        <div id="editDefectTypeInputs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-top:6px"></div>
+      </details>
       <div class="field-wrap">
         <div class="field-label">▶️ 가동시간 (분)</div>
         <input type="number" class="field-input" id="editRunMin" oninput="calcEditOEE()" style="color:var(--accent)">
@@ -1079,8 +1121,55 @@ optgroup{color:var(--muted);font-style:normal}
         <button class="period-btn" data-days="90" onclick="setWorkerLogRange(90)">90일</button>
       </div>
       <select class="field-input" id="workerLogLine" style="padding:8px 10px" onchange="renderWorkerLog()"></select>
+      <div class="period-toggle" id="workerLogViewBtns" style="margin-bottom:0">
+        <button class="period-btn active" data-view="log" onclick="setWorkerLogView('log')">📅 일별 이력</button>
+        <button class="period-btn" data-view="perf" onclick="setWorkerLogView('perf')">📊 작업자별 실적</button>
+      </div>
       <div id="workerLogResult" style="max-height:60vh;overflow-y:auto"></div>
     </div>
+  </div>
+</div>
+
+<!-- 관리자 PIN 모달 (확인 / 설정 공용) -->
+<div class="modal-overlay" id="pinModal" style="display:none">
+  <div class="delete-modal-box" style="border:1px solid var(--warn);box-shadow:0 0 40px rgba(255,204,0,0.15)">
+    <div style="font-size:40px;margin-bottom:8px">🔐</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--warn);letter-spacing:1px;margin-bottom:6px" id="pinModalTitle">관리자 PIN</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="pinModalDesc"></div>
+    <input type="password" inputmode="numeric" class="field-input" id="pinInput1" placeholder="PIN" autocomplete="off" style="text-align:center;margin-bottom:8px" onkeydown="if(event.key==='Enter')confirmPin()">
+    <input type="password" inputmode="numeric" class="field-input" id="pinInput2" placeholder="PIN 다시 입력" autocomplete="off" style="text-align:center;margin-bottom:8px;display:none" onkeydown="if(event.key==='Enter')confirmPin()">
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="closePinModal()" class="btn btn-sm" style="flex:1;padding:12px;border-radius:10px;font-size:13px;justify-content:center">취소</button>
+      <button onclick="confirmPin()" class="btn" style="flex:1;padding:12px;border-radius:10px;font-size:13px;font-weight:700;justify-content:center;background:linear-gradient(135deg,var(--warn),#cc9900);color:#000">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 변경 기록 모달 -->
+<div class="modal-overlay" id="auditModal" style="display:none;align-items:flex-start;overflow-y:auto">
+  <div class="modal-box" style="border:1px solid var(--accent);margin:auto;max-width:620px">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--accent)">📜 변경 기록</div>
+      <button class="modal-close" onclick="closeAuditModal()">✕</button>
+    </div>
+    <input type="text" class="field-input" id="auditFilter" autocomplete="off" placeholder="🔍 검색 (작업·대상·기기)" oninput="renderAuditList()" style="margin-bottom:10px">
+    <div id="auditList" style="max-height:65vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- 백업 · 복원 모달 -->
+<div class="modal-overlay" id="backupModal" style="display:none;align-items:flex-start;overflow-y:auto">
+  <div class="modal-box" style="border:1px solid var(--accent3);margin:auto;max-width:560px">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--accent3)">🗄️ 자동 백업 · 복원</div>
+      <button class="modal-close" onclick="closeBackupModal()">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+      매일 08시 이후 처음 접속한 기기가 전체 데이터를 자동 백업합니다 (최근 14일 보관).<br>
+      <b>실적만 복원</b> = 기존 실적은 그대로 두고 빠진 실적만 추가 · <b>전체 복원</b> = 품번·코드·라인을 그 날짜 상태로 되돌리고 실적·일정은 빠진 것만 추가
+    </div>
+    <button class="btn btn-sm" onclick="runDailyBackup(true)" style="width:100%;padding:10px;justify-content:center;margin-bottom:10px;color:var(--accent3);border-color:var(--accent3)">💾 지금 백업하기</button>
+    <div id="backupList"></div>
   </div>
 </div>
 
@@ -1147,6 +1236,26 @@ optgroup{color:var(--muted);font-style:normal}
     </table>
   </div>
   <div id="analysisDrilldown" style="display:none"></div>
+
+  <!-- 고장(수리대기) 분석 -->
+  <div class="form-card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:16px;font-weight:700;color:var(--warn);letter-spacing:1px">🔧 고장(수리대기) 분석</div>
+      <button id="downtimeToggle" onclick="toggleDowntimePanel()" style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;color:var(--muted);font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;padding:5px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0"></button>
+    </div>
+    <div id="downtimeBody">
+      <input type="month" id="downtimeMonth" class="field-input" style="width:auto;padding:6px 10px;font-size:12px;margin-bottom:14px" onchange="renderDowntimeAnalysis()">
+      <div class="tbl-scroll">
+        <table class="hist-table">
+          <thead><tr><th>라인</th><th>고장 횟수</th><th>총 정지(분)</th><th>평균 수리시간 (MTTR)</th><th>평균 고장간격 (MTBF)</th></tr></thead>
+          <tbody id="downtimeTableBody"></tbody>
+        </table>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin:4px 0 12px">※ MTBF = 해당 월 실적 가동시간 합계 ÷ 고장 횟수 · 진행 중인 고장은 현재까지 시간으로 계산</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">📋 고장 이력 (최근순)</div>
+      <div id="downtimeEventList"></div>
+    </div>
+  </div>
 
   <!-- 라인 캐파 분석 -->
   <div class="form-card" style="margin-top:16px">
@@ -1256,6 +1365,18 @@ let PRODUCTS  = [];
 let RECORDS   = [];
 let SCHEDULES = [];
 let WORK_LOGS = []; // 작업자 배치 이력 — { date, worker, lineId, lineName, partNos, firstAt, lastAt }
+let DOWNTIMES = []; // 수리대기(고장) 이력 — { lineId, lineName, start, end, note, autoClosed }
+let SETTINGS  = {}; // 공용 설정 — { adminPinHash }
+
+// 불량 유형 코드 (코드관리에서 추가/삭제)
+let DEFECT_CODES = [
+  { code:'DF-01', name:'찍힘',     emoji:'💥' },
+  { code:'DF-02', name:'스크래치', emoji:'〰️' },
+  { code:'DF-03', name:'치수불량', emoji:'📏' },
+  { code:'DF-04', name:'이물',     emoji:'🦠' },
+  { code:'DF-05', name:'조립불량', emoji:'🔧' },
+  { code:'DF-06', name:'기타',     emoji:'⚫' },
+];
 
 // type: loss=설비손실(OEE↓) / planned=계획손실(OEE제외) / other=기타손실(OEE↓)
 let LOSS_CODES = [
@@ -1299,6 +1420,7 @@ function saveData() {
   localStorage.setItem('mc_products',   JSON.stringify(PRODUCTS));
   localStorage.setItem('mc_records',    JSON.stringify(RECORDS));
   localStorage.setItem('mc_loss_codes', JSON.stringify(LOSS_CODES));
+  localStorage.setItem('mc_defect_codes', JSON.stringify(DEFECT_CODES));
   localStorage.setItem('mc_lines',      JSON.stringify(LINES));
   localStorage.setItem('mc_drafts',     JSON.stringify(DRAFTS));
   if (!fbDB) return;
@@ -1306,7 +1428,7 @@ function saveData() {
   // lines는 여기서 저장하지 않는다 — 품번/코드/임시저장 등 다른 저장 때마다 이 기기가 가진
   // (오래됐을 수 있는) 라인 목록으로 서버를 덮어써서, 다른 기기에서 바꾼 가동상태·작업자가
   // 통째로 비가동으로 되돌아가는 원인이었다. 라인 변경은 mutateLines()로만 저장한다.
-  fbDB.ref(FB_REF).update({ products: PRODUCTS, lossCodes: LOSS_CODES })
+  fbDB.ref(FB_REF).update({ products: PRODUCTS, lossCodes: LOSS_CODES, defectCodes: DEFECT_CODES })
     .then(() => showToast('✅ 저장됨'))
     .catch(e => { console.warn('[Firebase] 저장 실패:', e); showToast('❌ 저장 실패'); });
 }
@@ -1352,6 +1474,7 @@ function addRecordToFirebase(record, silent) {
   const local = { ...record, _key: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2) };
   RECORDS.push(local);
   localStorage.setItem('mc_records', JSON.stringify(RECORDS));
+  if (!silent) audit('실적 추가', `${record.date} ${shiftLabel(record.shift)} ${record.partNo}`, `생산 ${record.qty} · 불량 ${record.defect} · 입력자 ${record.inputBy || '-'}`);
   if (!fbDB) return;
   const ref = fbDB.ref(FB_REF + '/records').push();
   local._key = ref.key; // 로컬 임시키를 실제 Firebase 키로 교체
@@ -1391,6 +1514,49 @@ function addScheduleToFirebase(schedule, silent) {
   ref.set(schedule)
     .then(() => { if (!silent) showToast('✅ 일정 등록됨'); })
     .catch(e => { console.warn('[Firebase] 일정 저장 실패:', e); if (!silent) showToast('❌ 저장 실패'); });
+}
+
+// ── 수리대기(고장) 이력 ──
+// 라인이 수리대기로 바뀌면 시작, 다른 상태로 바뀌면 종료. 이벤트 1건 = Firebase 키 1개.
+function _saveDowntimesLocal() { localStorage.setItem('mc_downtimes', JSON.stringify(DOWNTIMES)); }
+
+function startDowntime(line, note) {
+  if (DOWNTIMES.some(d => d.lineId === line.id && !d.end)) return; // 이미 진행 중인 고장 있음
+  const ev = { lineId: line.id, lineName: line.name, partNos: line.partNos || [], start: new Date().toISOString(), end: null, note: note || '' };
+  const local = { ...ev, _key: 'local-' + Date.now() };
+  DOWNTIMES.push(local);
+  _saveDowntimesLocal();
+  if (!fbDB) return;
+  const ref = fbDB.ref(FB_REF + '/downtimes').push();
+  local._key = ref.key;
+  ref.set(ev).catch(e => console.warn('[Firebase] 고장 이력 저장 실패:', e));
+}
+
+// autoClosed: 08:00 초기화로 닫힌 경우 (실제 수리 완료 시각이 아님)
+function endDowntime(line, autoClosed = false) {
+  const end = new Date().toISOString();
+  DOWNTIMES.filter(d => d.lineId === line.id && !d.end).forEach(d => {
+    d.end = end;
+    if (autoClosed) d.autoClosed = true;
+    if (fbDB && d._key && !d._key.startsWith('local-'))
+      fbDB.ref(FB_REF + '/downtimes/' + d._key).update({ end, ...(autoClosed ? { autoClosed: true } : {}) })
+        .catch(e => console.warn('[Firebase] 고장 이력 저장 실패:', e));
+  });
+  _saveDowntimesLocal();
+}
+
+function downtimeMinutes(d) {
+  return Math.max(0, Math.round(((d.end ? new Date(d.end) : new Date()) - new Date(d.start)) / 60000));
+}
+
+// 생산 일정 1건 일부 수정 (진행 시작 시각 등) — 해당 키의 필드만 갱신
+function updateScheduleInFirebase(key, patch) {
+  const s = SCHEDULES.find(x => x._key === key);
+  if (s) Object.assign(s, patch);
+  localStorage.setItem('mc_schedules', JSON.stringify(SCHEDULES));
+  if (!fbDB || !key || key.startsWith('local-') || key.startsWith('legacy-')) return;
+  fbDB.ref(FB_REF + '/schedules/' + key).update(patch)
+    .catch(e => console.warn('[Firebase] 일정 수정 실패:', e));
 }
 
 // 생산 일정 1건 삭제 — 해당 키만 제거
@@ -1468,22 +1634,33 @@ function _applyLocal() {
   if (sc) SCHEDULES  = JSON.parse(sc);
   const wl = localStorage.getItem('mc_work_logs');
   if (wl) WORK_LOGS  = JSON.parse(wl);
+  const dc = localStorage.getItem('mc_defect_codes');
+  if (dc) DEFECT_CODES = JSON.parse(dc);
+  const dt = localStorage.getItem('mc_downtimes');
+  if (dt) DOWNTIMES = JSON.parse(dt);
   // 과거(키 없는) 형식으로 저장된 로컬 레코드에 임시 키 부여 (fbDB 연결 시 마이그레이션에서 실제 키로 교체됨)
   RECORDS   = RECORDS.map((r, i) => r._key ? r : { ...r, _key: 'legacy-' + i });
   SCHEDULES = SCHEDULES.map((s, i) => s._key ? s : { ...s, _key: 'legacy-' + i });
 }
 
+// 앱이 쓰는 Firebase 항목 — 전체(mc)를 통째로 받지 않고 항목별로 받는다.
+// (mc/backups·mc/auditLogs 같은 큰 보관용 데이터는 필요할 때만 따로 읽음)
+const FB_CHILDREN = ['products','records','lossCodes','defectCodes','lines','drafts','schedules','workLogs','downtimes','slideState','settings'];
+
 function loadData(callback) {
   if (!fbDB) { _applyLocal(); callback(); return; }
-  fbDB.ref(FB_REF).once('value').then(snap => {
-    const d = snap.val();
-    if (d) {
+  Promise.all(FB_CHILDREN.map(k => fbDB.ref(FB_REF + '/' + k).once('value').then(s => [k, s.val()]))).then(pairs => {
+    const d = Object.fromEntries(pairs);
+    if (pairs.some(([, v]) => v !== null && v !== undefined)) {
       if (Array.isArray(d.products))  PRODUCTS   = d.products;
       if (d.records)                  RECORDS    = _recordsObjToArray(d.records);
       if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
+      if (Array.isArray(d.defectCodes)) DEFECT_CODES = d.defectCodes;
       LINES = normLines(d.lines);
       if (Array.isArray(d.drafts))    DRAFTS     = d.drafts;
       if (d.schedules)                SCHEDULES  = _recordsObjToArray(d.schedules);
+      DOWNTIMES = d.downtimes ? _recordsObjToArray(d.downtimes) : [];
+      SETTINGS  = d.settings || {};
       if (d.workLogs) {
         WORK_LOGS = _recordsObjToArray(d.workLogs);
         localStorage.setItem('mc_work_logs', JSON.stringify(WORK_LOGS));
@@ -1543,24 +1720,34 @@ function loadData(callback) {
 
 function setupRealtimeSync() {
   if (!fbDB) return;
-  fbDB.ref(FB_REF).on('value', snap => {
-    const d = snap.val();
-    if (!d) return;
-    // 라인은 트랜잭션으로만 저장되므로 서버 값을 항상 그대로 반영한다.
-    // (예전에는 내가 저장한 직후 5초 동안 들어온 변경을 통째로 무시해서, 그 사이 다른 기기가
-    //  바꾼 가동상태를 놓친 채 오래된 라인 목록을 들고 있다가 다음 저장 때 덮어쓰는 문제가 있었다)
-    LINES = normLines(d.lines);
+  // 라인은 트랜잭션으로만 저장되므로 서버 값을 항상 그대로 반영한다.
+  // (예전에는 내가 저장한 직후 5초 동안 들어온 변경을 통째로 무시해서, 그 사이 다른 기기가
+  //  바꾼 가동상태를 놓친 채 오래된 라인 목록을 들고 있다가 다음 저장 때 덮어쓰는 문제가 있었다)
+  fbDB.ref(FB_REF + '/lines').on('value', snap => {
+    LINES = normLines(snap.val());
     localStorage.setItem('mc_lines', JSON.stringify(LINES));
-    if (Date.now() - _lastLocalSave < 5000) { renderLineStatus(); return; }
-    if (Array.isArray(d.products))  PRODUCTS   = d.products;
-    if (Array.isArray(d.lossCodes)) LOSS_CODES = d.lossCodes;
+    renderLineStatus();
+    if (document.getElementById('page-line-mgmt')?.classList.contains('active')) renderLineMgmt();
+  });
+  // 품번·손실코드·불량코드 — 내가 막 저장한 직후(5초)에 돌아오는 내 변경은 무시
+  const metaFirst = {};
+  const metaSync = (key, apply) => fbDB.ref(FB_REF + '/' + key).on('value', snap => {
+    const first = !metaFirst[key]; metaFirst[key] = true;
+    if (!first && Date.now() - _lastLocalSave < 5000) return;
+    const v = snap.val();
+    if (!Array.isArray(v)) return;
+    apply(v);
     renderDashboard(); renderHistory(); renderLineStatus();
-    renderProductList(); renderCodeList(); renderCodeTable();
+    renderProductList(); renderCodeList(); renderCodeTable(); renderDefectCodeList();
     renderDraftList();
     syncProductSelect();
-    if (_syncReady) showToast('🔄 다른 기기에서 동기화됨');
-    _syncReady = true;
+    if (!first) showToast('🔄 다른 기기에서 동기화됨');
   });
+  metaSync('products',    v => { PRODUCTS = v; });
+  metaSync('lossCodes',   v => { LOSS_CODES = v; });
+  metaSync('defectCodes', v => { DEFECT_CODES = v; });
+  fbDB.ref(FB_REF + '/settings').on('value', snap => { SETTINGS = snap.val() || {}; });
+  _syncReady = true;
   // records는 전체가 아니라 child 단위(개별 실적 1건)로 감지 — 동시 입력 시 서로의 데이터를 덮어쓰지 않는다
   let _recordsSyncReady = false;
   fbDB.ref(FB_REF + '/records').on('child_added', snap => {
@@ -1614,6 +1801,15 @@ function setupRealtimeSync() {
       showToast('🔄 다른 기기에서 일정이 추가됨');
     }
   });
+  fbDB.ref(FB_REF + '/schedules').on('child_changed', snap => {
+    const data = snap.val();
+    if (!data) return;
+    const idx = SCHEDULES.findIndex(s => s._key === snap.key);
+    if (idx !== -1) SCHEDULES[idx] = { ...data, _key: snap.key };
+    else SCHEDULES.push({ ...data, _key: snap.key });
+    localStorage.setItem('mc_schedules', JSON.stringify(SCHEDULES));
+    renderScheduleList(); renderScheduleBottomPanel();
+  });
   fbDB.ref(FB_REF + '/schedules').on('child_removed', snap => {
     const key = snap.key;
     SCHEDULES = SCHEDULES.filter(s => s._key !== key);
@@ -1624,6 +1820,22 @@ function setupRealtimeSync() {
     }
   });
   setTimeout(() => { _schedulesSyncReady = true; }, 3000);
+
+  // downtimes(수리대기 이력)
+  const _upsertDowntime = snap => {
+    const data = snap.val();
+    if (!data) return;
+    const idx = DOWNTIMES.findIndex(d => d._key === snap.key);
+    if (idx !== -1) DOWNTIMES[idx] = { ...data, _key: snap.key };
+    else DOWNTIMES.push({ ...data, _key: snap.key });
+    _saveDowntimesLocal();
+  };
+  fbDB.ref(FB_REF + '/downtimes').on('child_added', _upsertDowntime);
+  fbDB.ref(FB_REF + '/downtimes').on('child_changed', _upsertDowntime);
+  fbDB.ref(FB_REF + '/downtimes').on('child_removed', snap => {
+    DOWNTIMES = DOWNTIMES.filter(d => d._key !== snap.key);
+    _saveDowntimesLocal();
+  });
 
   // workLogs(작업자 배치 이력)도 child 단위로 감지 — 화면은 모달을 열 때 다시 그리므로 데이터만 갱신
   const _upsertWorkLog = snap => {
@@ -1737,7 +1949,15 @@ function onDateInput() {
 // ══ 탭 전환 ══
 const PAGE_ORDER = ['lines','dashboard','input','history','products','codes','line-mgmt','schedule','analysis'];
 
+// 관리자 PIN이 필요한 화면 (PIN 미설정 시에는 그대로 열림)
+const ADMIN_PAGES = ['products', 'codes', 'line-mgmt'];
+
 function showPage(name, tabEl, bnavId) {
+  if (ADMIN_PAGES.includes(name) && SETTINGS.adminPinHash && Date.now() >= _adminUntil) {
+    _navIgnorePop = false; // 뒤로가기로 들어온 경우 다음 화면 기록이 무시되지 않도록
+    openPinModal('check', () => showPage(name, tabEl, bnavId));
+    return;
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
 
@@ -1762,6 +1982,61 @@ function showPage(name, tabEl, bnavId) {
 
   navPushPage(name);
 }
+
+// ══ 스와이프 제스처 ══
+// 화면을 좌우로 밀면 이전/다음 탭으로 이동 (가동현황 자동 전환 중이면 이전/다음 라인 카드).
+// 가로 스크롤 영역(표·차트)·입력칸·팝업 안에서 시작한 터치와 세로 스크롤에 가까운 동작은 무시한다.
+const SWIPE_MIN_DX   = 70;   // 최소 가로 이동(px)
+const SWIPE_MAX_MS   = 600;  // 이 시간 안에 끝난 동작만 스와이프로 인정
+let _swipe = null;
+
+function _swipeBlocked(target) {
+  if (navGetOpenModalId()) return true;
+  if (target.closest('input, select, textarea, header, .nav-tabs, .bottom-nav, #updateBanner')) return true;
+  for (let el = target; el && el !== document.body; el = el.parentElement) {
+    const ox = getComputedStyle(el).overflowX;
+    if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 2) return true;
+  }
+  return false;
+}
+
+function _animateSwipe(el, dir) {
+  if (!el) return;
+  const cls = dir > 0 ? 'swipe-in-right' : 'swipe-in-left';
+  el.classList.remove('swipe-in-right', 'swipe-in-left');
+  void el.offsetWidth; // 애니메이션 재시작
+  el.classList.add(cls);
+  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+}
+
+function handleSwipe(dir) { // dir: +1 = 다음(왼쪽으로 밂), -1 = 이전(오른쪽으로 밂)
+  if (_navCurrentPage === 'lines' && _slideActive && slideTotalPages() > 1) {
+    goSlidePage(_slidePage + dir);
+    if (_slideActive) startSlideTimer(); // 손으로 넘긴 뒤 자동 전환 카운트 다시 시작
+    return;
+  }
+  const next = PAGE_ORDER[PAGE_ORDER.indexOf(_navCurrentPage) + dir];
+  if (!next) return; // 첫/마지막 탭에서는 더 넘어가지 않음
+  showPage(next);
+  _animateSwipe(document.getElementById('page-' + next), dir);
+  document.querySelector('.bnav-btn.active')?.scrollIntoView?.({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+}
+
+document.addEventListener('touchstart', e => {
+  if (e.touches.length !== 1 || _swipeBlocked(e.target)) { _swipe = null; return; }
+  const t = e.touches[0];
+  _swipe = { x: t.clientX, y: t.clientY, at: Date.now() };
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+  if (!_swipe) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - _swipe.x, dy = t.clientY - _swipe.y;
+  const quick = Date.now() - _swipe.at <= SWIPE_MAX_MS;
+  _swipe = null;
+  if (!quick || Math.abs(dx) < SWIPE_MIN_DX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  handleSwipe(dx < 0 ? 1 : -1);
+}, { passive: true });
 
 // ══ 현재 화면 HTML / PDF 다운로드 ══
 // 실적입력·품번관리·코드관리·가동현황은 조회용 화면이 아니라 제외
@@ -1851,10 +2126,73 @@ ${printScript}
 </html>`;
 }
 
+// ── 엑셀(CSV) 내보내기 ──
+// 엑셀에서 한글이 깨지지 않도록 UTF-8 BOM을 붙인다
+function csvCell(v) {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+const toCsv = rows => rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+const pct1 = v => (v * 100).toFixed(1);
+
+function recordsCsvRows(recs) {
+  const head = ['날짜','주차','교대','품번','품명','생산','불량','양품','가동(분)','가용률(%)','성능률(%)','품질률(%)','OEE(%)','입력자','손실코드','불량유형'];
+  const body = sortRecordsByDateDesc(recs).map(r => [
+    r.date, getWeekKey(r.date), shiftLabel(r.shift), r.partNo, PRODUCTS.find(p => p.no === r.partNo)?.name || '',
+    r.qty, r.defect, (r.qty || 0) - (r.defect || 0), r.runMin,
+    pct1(r.avail), pct1(r.perf), pct1(r.qual), pct1(r.avail * r.perf * r.qual), r.inputBy || '',
+    (r.lossCodes || []).filter(l => l.min).map(l => `${LOSS_CODES.find(c => c.code === l.code)?.name || l.code} ${l.min}분${l.note ? `(${l.note})` : ''}`).join(' / '),
+    (r.defects || []).map(d => `${DEFECT_CODES.find(c => c.code === d.code)?.name || d.code} ${d.qty}`).join(' / '),
+  ]);
+  return [head, ...body];
+}
+
+// 화면에 보이는 표를 그대로 CSV로 (분석·라인관리 등)
+function tableCsvRows(table, title) {
+  const rows = [[`[${title}]`]];
+  table.querySelectorAll('tr').forEach(tr => {
+    if (getComputedStyle(tr).display === 'none') return;
+    rows.push([...tr.children].map(td => td.textContent.replace(/\s+/g, ' ').trim()));
+  });
+  return rows;
+}
+
+function exportCsv(name) {
+  let rows = [];
+  if (name === 'dashboard') rows = recordsCsvRows(dashFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === dashFilter));
+  else if (name === 'history') rows = recordsCsvRows(histFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === histFilter));
+  else if (name === 'schedule') {
+    rows = [['날짜','품번','품명','계획','실적','달성률(%)','상태','라인','진행 시작'],
+      ...[...SCHEDULES].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(s => {
+        const pr = scheduleProgress(s);
+        return [s.date, s.partNo, s.partName || '', pr.plan, pr.actual, pr.rate.toFixed(1), pr.cfg.label.replace(/^\S+\s/, ''), s.lineName || '', s.startedAt ? new Date(s.startedAt).toLocaleString('ko-KR') : ''];
+      })];
+  } else if (name === 'line-mgmt') {
+    rows = [['라인','상태','담당 품번','작업자'], ...LINES.map(l => [l.name, LINE_STATUS_CFG[l.status || 'idle']?.label || '', (l.partNos || []).join(' / '), (l.workers || []).join(' / ')])];
+  } else if (name === 'analysis') {
+    const page = document.getElementById('page-analysis');
+    const titles = { analysisTableBody: '상세 데이터', downtimeTableBody: '고장(수리대기) 분석', lineCapaTableBody: '라인 캐파 분석' };
+    page.querySelectorAll('table').forEach(t => {
+      if (getComputedStyle(t).display === 'none' || t.closest('[style*="display: none"],[style*="display:none"]')) return;
+      const id = t.querySelector('tbody')?.id;
+      rows.push(...tableCsvRows(t, titles[id] || '표'), []);
+    });
+  }
+  if (rows.length <= 1) { showToast('⚠️ 내보낼 데이터가 없습니다'); return; }
+  const t = new Date();
+  const stamp = `${todayDateStr().replace(/-/g, '')}_${String(t.getHours()).padStart(2,'0')}${String(t.getMinutes()).padStart(2,'0')}`;
+  const url = URL.createObjectURL(new Blob(['﻿' + toCsv(rows)], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = `MC_${EXPORT_PAGES[name]}_${stamp}.csv`; a.click();
+  URL.revokeObjectURL(url);
+  showToast('📊 엑셀(CSV) 다운로드 완료');
+}
+
 function exportCurrentPage(fmt) {
   closeExportMenu();
   const name = _navCurrentPage;
   if (!EXPORT_PAGES[name]) { showToast('⚠️ 이 화면은 다운로드를 지원하지 않습니다'); return; }
+  if (fmt === 'csv') { exportCsv(name); return; }
   const html = buildExportHtml(name, fmt === 'pdf');
 
   if (fmt === 'pdf') {
@@ -1994,8 +2332,37 @@ function buildDashFilterBtns() {
   sel.value = dashFilter;
 }
 
+// 대시보드 — 오늘(근무일) 생산일정의 계획 대비 실적
+function renderDashPlan() {
+  const el = document.getElementById('dashPlanSection');
+  if (!el) return;
+  const today = workDateStr();
+  const list = SCHEDULES.filter(s => s.date === today && (dashFilter === 'all' || s.partNo === dashFilter));
+  if (!list.length) { el.innerHTML = ''; return; }
+  const sum = summarizeSchedules(list);
+  const col = sum.rate >= 100 ? 'var(--accent3)' : sum.rate >= 70 ? 'var(--warn)' : 'var(--danger)';
+  el.innerHTML = `
+    <div class="section-title">🎯 오늘 계획 대비 실적</div>
+    <div class="form-card" style="padding:12px 14px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <span style="font-size:13px;color:var(--muted)">달성 ${sum.doneCount}/${list.length}건 · 실적 ${sum.actual.toLocaleString()} / 계획 ${sum.plan.toLocaleString()}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:${col}">${sum.rate.toFixed(1)}%</span>
+      </div>
+      ${scheduleProgressBar({ rate: sum.rate, state: '' }, 10)}
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+        ${sum.prs.sort((a, b) => a.pr.rate - b.pr.rate).map(({ s, pr }) => `
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+            <span style="font-family:'JetBrains Mono',monospace;width:130px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.partNo}</span>
+            <div style="flex:1">${scheduleProgressBar(pr)}</div>
+            <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${pr.cfg.color};width:120px;text-align:right;flex-shrink:0">${pr.actual.toLocaleString()}/${pr.plan.toLocaleString()} (${pr.rate.toFixed(0)}%)</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
 function renderDashboard() {
   buildDashFilterBtns();
+  renderDashPlan();
 
   const base = dashFilter === 'all' ? RECORDS : RECORDS.filter(r => r.partNo === dashFilter);
 
@@ -2632,6 +2999,8 @@ function saveRecord() {
   if (!partNo) { showToast('⚠️ 품번을 선택하세요');    return; }
   if (!ct)     { showToast('⚠️ CT 없음 (품번 재선택)'); return; }
   if (defect > qty) { showToast('⚠️ 불량수량이 생산수량보다 많습니다'); return; }
+  const defects = collectDefectTypes('defect_');
+  if (!checkDefectTypes(defects, defect)) return;
   // 수량 0(인원부족 등 비가동)은 허용하되, 비가동 사유(손실코드 시간)는 반드시 입력
   if (!qty) {
     const hasReason = LOSS_CODES.some(c => c.type !== 'planned' && (+(document.getElementById('time_' + c.code)?.value) || 0) > 0);
@@ -2669,7 +3038,7 @@ function saveRecord() {
   const perf  = (runMin > 0 && qty > 0) ? Math.min((qty * ct / 60) / runMin, 1) : 0;
   const qual  = qty > 0 ? good / qty : 0;
 
-  addRecordToFirebase({ date, shift, partNo, qty, defect, good, runMin, ct, avail, perf, qual, lossCodes, inputBy });
+  addRecordToFirebase({ date, shift, partNo, qty, defect, good, runMin, ct, avail, perf, qual, lossCodes, defects, inputBy });
 
   // 임시저장에서 불러온 데이터로 저장 시 해당 임시저장 자동 삭제
   if (loadedDraftId) {
@@ -2702,6 +3071,8 @@ function resetInputForm() {
     const nel = document.getElementById('note_' + c.code);
     if (nel) nel.value = '';
   });
+  fillDefectTypes('defect_', []);
+  syncDefectSum('defect_', 'inputDefect', 'defectTypeSum');
   const el = document.getElementById('inputRunTime');
   el.dataset.manual = '';
   document.getElementById('autoRunHint').style.display = 'none';
@@ -2750,6 +3121,10 @@ function openRecordEditModal(idx) {
   document.getElementById('editDefect').value    = r.defect;
   document.getElementById('editRunMin').value    = r.runMin;
   document.getElementById('editInputBy').value   = r.inputBy || '';
+  renderDefectTypeInputs('editDefectTypeInputs', 'edit_defect_', 'onEditDefectTypeInput()');
+  fillDefectTypes('edit_defect_', r.defects);
+  document.getElementById('editDefectTypeSum').textContent = (r.defects || []).length ? `· 합계 ${r.defects.reduce((a, d) => a + d.qty, 0)}` : '';
+  document.getElementById('editDefectTypeWrap').open = (r.defects || []).length > 0;
   const wrap = document.getElementById('editCodeRows');
   const editGroups = [
     { type:'loss',    label:'🔴 설비손실', note:'OEE 반영',  color:'#ff4060', bg:'rgba(255,64,96,0.07)',   border:'rgba(255,64,96,0.2)'   },
@@ -2828,6 +3203,8 @@ function saveRecordEdit() {
   const runMin  = +document.getElementById('editRunMin').value || 0;
   const inputBy = (document.getElementById('editInputBy')?.value || '').trim();
   if (defect > qty) { showToast('⚠️ 불량수량이 생산수량보다 많습니다'); return; }
+  const defects = collectDefectTypes('edit_defect_');
+  if (!checkDefectTypes(defects, defect)) return;
   if (!qty) {
     const hasReason = LOSS_CODES.some(c => c.type !== 'planned' && (+(document.getElementById('edit_time_' + c.code)?.value) || 0) > 0);
     if (!hasReason) { showToast('⚠️ 생산수량이 0이면 비가동 사유(손실코드 시간)를 입력하세요'); return; }
@@ -2857,8 +3234,9 @@ function saveRecordEdit() {
   const perf  = (runMin > 0 && qty > 0) ? (ct ? Math.min((qty * ct / 60) / runMin, 1) : r.perf) : 0;
   const qual  = qty > 0 ? good / qty : 0;
   const { _key, ...rBase } = r;
-  const updated = { ...rBase, date: document.getElementById('editDate').value, shift: document.getElementById('editShift').value, qty, defect, good, runMin, avail, perf, qual, lossCodes, inputBy };
+  const updated = { ...rBase, date: document.getElementById('editDate').value, shift: document.getElementById('editShift').value, qty, defect, good, runMin, avail, perf, qual, lossCodes, defects, inputBy };
   updateRecordInFirebase(_key, updated);
+  audit('실적 수정', `${updated.date} ${shiftLabel(updated.shift)} ${updated.partNo}`, `생산 ${qty} · 불량 ${defect}`);
   showToast('✏️ 실적이 수정되었습니다!');
   closeRecordEditModal();
   renderDashboard();
@@ -2931,12 +3309,14 @@ function confirmDelete() {
     if (deleteTargetIdx === null) return;
     const removed = PRODUCTS.splice(deleteTargetIdx, 1)[0];
     saveData();
+    audit('품번 삭제', removed.no, removed.name);
     showToast(`🗑️ ${removed.no} 삭제됨`);
     closeDeleteModal(); renderProductList(); syncProductSelect();
   } else if (deleteMode === 'code') {
     if (deleteTargetIdx === null) return;
     const removed = LOSS_CODES.splice(deleteTargetIdx, 1)[0];
     saveData();
+    audit('손실코드 삭제', removed.code, removed.name);
     showToast(`🗑️ ${removed.code} 삭제됨`);
     closeDeleteModal(); renderCodeList(); renderCodeTable();
   } else if (deleteMode === 'record') {
@@ -2944,6 +3324,7 @@ function confirmDelete() {
     const removed = RECORDS[recordDeleteIdx];
     if (!removed) return;
     deleteRecordFromFirebase(removed._key);
+    audit('실적 삭제', `${removed.date} ${shiftLabel(removed.shift)} ${removed.partNo}`, `생산 ${removed.qty} · 입력자 ${removed.inputBy || '-'}`);
     showToast(`🗑️ ${removed.date} ${shiftLabel(removed.shift)} 실적 삭제됨`);
     closeDeleteModal(); renderDashboard(); renderHistory();
   } else if (deleteMode === 'line') {
@@ -2951,12 +3332,14 @@ function confirmDelete() {
     const removed = LINES[deleteTargetIdx];
     if (!removed) return;
     mutateLines(arr => arr.filter(l => l.id !== removed.id));
+    audit('라인 삭제', removed.name);
     showToast(`🗑️ ${removed.name} 삭제됨`);
     closeDeleteModal(); renderLineMgmt(); renderLineStatus();
   } else if (deleteMode === 'schedule') {
     if (!scheduleDeleteKey) return;
     const removed = SCHEDULES.find(x => x._key === scheduleDeleteKey);
     deleteScheduleFromFirebase(scheduleDeleteKey);
+    if (removed) audit('일정 삭제', `${removed.date} ${removed.partNo}`, `계획 ${removed.qty}ea`);
     showToast(`🗑️ ${removed ? removed.partNo : ''} 일정 삭제됨`);
     closeDeleteModal(); renderScheduleList(); renderScheduleBottomPanel();
   }
@@ -3121,6 +3504,85 @@ function renderSlicedLineStatus() {
   }
   updateSlideDots();
   renderScheduleBottomPanel();
+  updateWaitTimers();
+}
+
+// ── 라인 카드에서 바로 실적 입력 ──
+function toggleQuickPick(idx) {
+  const el = document.getElementById('quickPick_' + idx);
+  if (el) el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+}
+
+function quickInputForLine(idx, partNo) {
+  const line = LINES[idx];
+  if (!line) return;
+  // 그 품번의 임시저장이 있으면 이어서 입력할지 먼저 확인
+  const draft = (DRAFTS || []).filter(d => d.partNo === partNo).sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''))[0];
+  if (draft && confirm(`📝 ${partNo} 임시저장이 있습니다.\n불러와서 이어서 입력할까요?\n\n[확인] 임시저장 불러오기   [취소] 새로 입력`)) {
+    loadDraft(draft.id);
+    return;
+  }
+  const curProduct = document.getElementById('inputProduct').value.trim();
+  const busy = curProduct && curProduct !== partNo && (+document.getElementById('inputQty').value || 0) > 0;
+  if (busy && !confirm(`✏️ 실적입력 화면에 ${curProduct} 입력 중인 내용이 있습니다.\n지우고 ${partNo} 입력을 시작할까요?`)) return;
+  resetInputForm();
+  document.getElementById('inputDate').value = workDateStr(); // 08시 이전(야간)은 전날 날짜
+  onDateInput();
+  selectProduct(partNo);
+  const byEl = document.getElementById('inputBy');
+  if (!byEl.value.trim() && (line.workers || []).length) byEl.value = line.workers[0];
+  showPage('input');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  showToast(`✏️ ${line.name} · ${partNo} 실적 입력`);
+}
+
+// ── 수리대기 경과 시간 / 장시간 정지 경고 ──
+const WAIT_ALERT_MIN = 30; // 이 시간(분) 이상 수리대기면 카드 깜빡임
+
+function fmtElapsed(min) {
+  return min < 60 ? `${min}분째` : `${Math.floor(min / 60)}시간 ${min % 60}분째`;
+}
+
+function buildWaitInfoHtml(line, solo) {
+  if (line.status !== 'waiting') return '';
+  const open  = DOWNTIMES.find(d => d.lineId === line.id && !d.end);
+  const since = open?.start || line.statusAt;
+  if (!since) return '';
+  const min = downtimeMinutes({ start: since });
+  return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.35);border-radius:8px;padding:${solo ? '10px 12px' : '6px 10px'};font-size:${solo ? 16 : 13}px">
+    <span style="font-weight:700;color:var(--warn)">🔧 수리대기</span>
+    <span class="wait-timer" data-wait-since="${since}">${fmtElapsed(min)}</span>
+    ${open?.note ? `<span style="color:var(--text);font-size:${solo ? 14 : 12}px">· ${escapeHtml(open.note)}</span>` : ''}
+    <span style="font-size:10px;color:var(--muted);margin-left:auto">${WAIT_ALERT_MIN}분 이상이면 깜빡임</span>
+  </div>`;
+}
+
+// 화면 전체를 다시 그리지 않고 경과 시간 글자와 깜빡임만 갱신 (입력 중인 작업자명이 지워지지 않도록)
+function updateWaitTimers() {
+  document.querySelectorAll('[data-wait-since]').forEach(el => {
+    const min = downtimeMinutes({ start: el.dataset.waitSince });
+    el.textContent = fmtElapsed(min);
+    el.closest('.line-card')?.classList.toggle('wait-long', min >= WAIT_ALERT_MIN);
+  });
+}
+setInterval(updateWaitTimers, 30 * 1000);
+
+// 라인 카드 — 담당 품번의 오늘 생산계획 진행률
+function buildLinePlanHtml(line, solo) {
+  const today = workDateStr();
+  const list = SCHEDULES.filter(s => s.date === today && (line.partNos || []).includes(s.partNo));
+  if (!list.length) return '';
+  return `<div style="display:flex;flex-direction:column;gap:5px">
+    <div style="font-size:12px;font-weight:700;color:var(--accent3);letter-spacing:0.5px">🎯 오늘 계획</div>
+    ${list.map(s => {
+      const pr = scheduleProgress(s);
+      return `<div style="display:flex;align-items:center;gap:8px;font-size:${solo ? 14 : 12}px">
+        <span style="font-family:'JetBrains Mono',monospace;flex-shrink:0;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.partNo}</span>
+        <div style="flex:1">${scheduleProgressBar(pr, solo ? 10 : 6)}</div>
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${pr.cfg.color};flex-shrink:0">${pr.actual.toLocaleString()}/${pr.plan.toLocaleString()} (${pr.rate.toFixed(0)}%)</span>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 function buildLineCard(line, idx, solo = false) {
@@ -3208,7 +3670,18 @@ function buildLineCard(line, idx, solo = false) {
         <button class="line-status-btn lsb-waiting ${line.status==='waiting'?'on':''}"
           onclick="setLineStatus(${idx},'waiting')" style="border-color:#ffcc00">🟡 수리대기</button>
       </div>
+      ${(line.partNos || []).length ? `
+      <div>
+        <button class="btn" onclick="${line.partNos.length === 1 ? `quickInputForLine(${idx},'${line.partNos[0].replace(/'/g, "\\'")}')` : `toggleQuickPick(${idx})`}"
+          style="width:100%;justify-content:center;padding:${solo ? '12px' : '8px'};font-size:${solo ? 16 : 13}px;background:rgba(255,107,53,0.12);border:1px solid var(--accent2);color:var(--accent2)">✏️ 실적 입력${line.partNos.length > 1 ? ' ▾' : ''}</button>
+        <div id="quickPick_${idx}" style="display:none;flex-wrap:wrap;gap:6px;margin-top:6px">
+          ${line.partNos.map(no => `<button class="worker-add-btn" style="border-style:solid;color:var(--accent);border-color:var(--accent);font-size:13px;padding:5px 12px"
+            onclick="quickInputForLine(${idx},'${no.replace(/'/g, "\\'")}')">${escapeHtml(no)}</button>`).join('')}
+        </div>
+      </div>` : ''}
+      ${buildWaitInfoHtml(line, solo)}
       ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center"><span style="font-size:12px;color:var(--muted);flex-shrink:0">🏷️</span>${chips}</div>` : ''}
+      ${buildLinePlanHtml(line, solo)}
       ${recRows ? `
       <div>
         <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:5px;letter-spacing:0.5px">📋 최근 실적</div>
@@ -3291,34 +3764,35 @@ function setLineStatus(idx, status) {
   const line = LINES[idx];
   if (!line) return;
   const at = new Date().toISOString();
+  const prev = line.status || 'idle';
+  if (status === 'waiting' && prev !== 'waiting') {
+    const note = prompt(`🔧 ${line.name} 수리대기 — 고장 내용을 입력하세요 (선택, 취소해도 기록됨)`, '');
+    startDowntime(line, (note || '').trim());
+  }
+  if (prev === 'waiting' && status !== 'waiting') endDowntime(line);
+  if (prev !== status) audit('가동상태 변경', line.name, `${LINE_STATUS_CFG[prev]?.label || prev} → ${LINE_STATUS_CFG[status]?.label || status}`);
   if (status === 'running') (line.workers || []).forEach(w => logWorkerAssignment(line, w));
   if (status === 'stopped' || status === 'idle') (line.workers || []).forEach(w => endWorkerAssignment(line, w));
   // 비가동 전환 시 작업자 자동 해제 (이력은 위에서 종료 기록됨)
   mutateLines(arr => arr.map(l => l.id !== line.id ? l
     : { ...l, status, statusAt: at, touchedAt: at, workers: status === 'idle' ? [] : (l.workers || []) }));
-  if (status === 'running') autoDeleteSchedulesForLine(line);
+  if (status === 'running') markSchedulesStartedForLine(line);
   renderSlicedLineStatus();
 }
 
-// 라인이 '가동중'으로 바뀌면 해당 라인의 담당 품번 + 오늘 날짜와 정확히 일치하는
-// 생산일정을 자동으로 완료 처리(삭제)한다 — 날짜가 다른(미래) 일정은 건드리지 않는다.
-// '가동중' 버튼을 누를 때마다 매번 재확인한다.
-function autoDeleteSchedulesForLine(line) {
+// 라인이 '가동중'으로 바뀌면 담당 품번 + 오늘 날짜의 생산일정에 "진행 시작" 시각을 남긴다.
+// (예전에는 일정을 바로 삭제해서 계획 대비 실적을 볼 수 없었다 — 이제 일정은 남겨두고
+//  실적과 비교해 달성률을 계산한다)
+function markSchedulesStartedForLine(line) {
   const partNos = line.partNos || [];
-  if (!partNos.length || !SCHEDULES.length) return;
-  const today = todayDateStr();
-  const deletedNos = [];
-  partNos.forEach(no => {
-    const match = SCHEDULES.find(s => s.partNo === no && s.date === today);
-    if (!match) return;
-    deleteScheduleFromFirebase(match._key);
-    deletedNos.push(no);
-  });
-  if (deletedNos.length) {
-    renderScheduleList();
-    renderScheduleBottomPanel();
-    showToast(`🗓️ ${deletedNos.join(', ')} 생산일정 자동 완료 처리됨 (가동 시작)`);
-  }
+  const today = workDateStr();
+  const started = SCHEDULES.filter(s => partNos.includes(s.partNo) && s.date === today && !s.startedAt);
+  if (!started.length) return;
+  const at = new Date().toISOString();
+  started.forEach(s => updateScheduleInFirebase(s._key, { startedAt: at, lineName: line.name }));
+  renderScheduleList();
+  renderScheduleBottomPanel();
+  showToast(`🗓️ ${started.map(s => s.partNo).join(', ')} 생산일정 진행 시작`);
 }
 
 function showWorkerInput(idx) {
@@ -3346,6 +3820,7 @@ function confirmAddWorker(idx) {
   }
   // 이력은 가동중 라인에 등록된 경우만 남긴다 (가동 전 미리 등록한 작업자는 '가동중' 전환 시 기록됨)
   if (line.status === 'running') logWorkerAssignment(line, name);
+  audit('작업자 배치', line.name, name + (moveFromIds.length ? ` (${others.map(l => l.name).join(', ')}에서 이동)` : ''));
   const at = new Date().toISOString();
   mutateLines(arr => arr.map(l => {
     const ws = l.workers || [];
@@ -3361,6 +3836,7 @@ function removeWorker(idx, wi) {
   const name = (line?.workers || [])[wi];
   if (!name) return;
   endWorkerAssignment(line, name);
+  audit('작업자 해제', line.name, name);
   const at = new Date().toISOString();
   mutateLines(arr => arr.map(l => l.id !== line.id ? l
     : { ...l, workers: (l.workers || []).filter(w => w !== name), touchedAt: at }));
@@ -3467,11 +3943,58 @@ function collectWorkerLogRows() {
     b.date.localeCompare(a.date) || a.worker.localeCompare(b.worker) || a.lineName.localeCompare(b.lineName));
 }
 
+let _workerLogView = 'log';
+
+function setWorkerLogView(v) {
+  _workerLogView = v;
+  document.querySelectorAll('#workerLogViewBtns .period-btn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  renderWorkerLog();
+}
+
+// 작업자별 실적 — 같은 근무일에 그 작업자가 배치된 라인의 품번 실적을 묶는다.
+// (같은 라인에 여러 명이 있으면 그 라인 실적은 각 작업자에게 모두 포함됨)
+function buildWorkerPerfHtml(rows) {
+  const perf = {};
+  rows.forEach(row => {
+    const p = perf[row.worker] ||= { days: new Set(), lines: {}, recs: new Map() };
+    p.days.add(row.date);
+    p.lines[row.lineName] = (p.lines[row.lineName] || 0) + 1;
+    RECORDS.forEach(r => {
+      if (r.date === row.date && row.partNos.has(r.partNo)) p.recs.set(r._key || RECORDS.indexOf(r), r);
+    });
+  });
+  const list = Object.entries(perf).map(([worker, p]) => {
+    const recs = [...p.recs.values()];
+    const qty = recs.reduce((a, r) => a + (r.qty || 0), 0);
+    const defect = recs.reduce((a, r) => a + (r.defect || 0), 0);
+    const oee = recs.length ? recs.reduce((a, r) => a + r.avail * r.perf * r.qual * 100, 0) / recs.length : null;
+    const mainLine = Object.entries(p.lines).sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
+    return { worker, days: p.days.size, lineCount: Object.keys(p.lines).length, mainLine, recCount: recs.length, qty, defect,
+             defRate: qty ? defect / qty * 100 : 0, oee, perDay: p.days.size ? qty / p.days.size : 0 };
+  }).sort((a, b) => b.qty - a.qty);
+  if (!list.length) return `<div style="text-align:center;padding:30px;color:var(--muted)">📭 해당 조건의 작업 이력이 없습니다</div>`;
+  return `<div class="tbl-scroll"><table class="hist-table" style="font-size:12px">
+      <thead><tr><th>작업자</th><th>근무일</th><th>주요 라인</th><th>실적</th><th>생산</th><th>일평균</th><th>불량률</th><th>평균 OEE</th></tr></thead>
+      <tbody>${list.map(x => `<tr class="hist-row">
+        <td style="font-weight:700;color:var(--accent)">👤 ${escapeHtml(x.worker)}</td>
+        <td>${x.days}일</td>
+        <td>${escapeHtml(x.mainLine)}${x.lineCount > 1 ? ` <span style="color:var(--muted);font-size:10px">외 ${x.lineCount - 1}</span>` : ''}</td>
+        <td>${x.recCount}건</td>
+        <td style="font-family:'JetBrains Mono',monospace">${x.qty.toLocaleString()}</td>
+        <td style="font-family:'JetBrains Mono',monospace">${Math.round(x.perDay).toLocaleString()}</td>
+        <td style="color:var(--danger)">${x.qty ? x.defRate.toFixed(2) + '%' : '-'}</td>
+        <td class="${x.oee === null ? '' : oeeClass(x.oee)}">${x.oee === null ? '-' : x.oee.toFixed(1) + '%'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">※ 근무일에 배치된 라인의 담당 품번 실적(같은 날짜)을 합산 · 같은 라인에 여러 명이 함께 배치되면 그 실적은 각자에게 모두 포함됩니다</div>`;
+}
+
 function renderWorkerLog() {
   const el = document.getElementById('workerLogResult');
   if (!el) return;
   syncWorkerLogRangeBtns();
   const rows = collectWorkerLogRows();
+  if (_workerLogView === 'perf') { el.innerHTML = buildWorkerPerfHtml(rows); return; }
   if (!rows.length) {
     el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--muted)">📭 해당 조건의 작업 이력이 없습니다</div>`;
     return;
@@ -3642,10 +4165,12 @@ function saveLineModal() {
     // 라인명·담당품번만 바꾸고 가동상태·작업자는 서버의 최신값을 그대로 둔다
     const id = LINES[idx].id;
     mutateLines(arr => arr.map(l => l.id === id ? { ...l, name, partNos } : l));
+    audit('라인 수정', name, partNos.join(', '));
     showToast('✏️ 라인이 수정되었습니다');
   } else {
     const newLine = { id:'line-'+Date.now(), name, partNos, status:'idle', workers:[], statusAt:null };
     mutateLines(arr => arr.some(l => l.id === newLine.id) ? arr : [...arr, newLine]);
+    audit('라인 추가', name, partNos.join(', '));
     showToast('➕ 라인이 추가되었습니다');
   }
   closeLineModal();
@@ -3744,11 +4269,13 @@ function saveProduct() {
         ? { ...l, partNos: l.partNos.map(p => p === oldNo ? no : p) } : l));
     }
     saveData();
+    audit('품번 수정', no, `${name} · CT ${ct}초`);
     showToast(`✏️ ${no} 수정 완료!`);
   } else {
     if (PRODUCTS.find(p => p.no === no)) { showToast(dupMsg); return; }
     PRODUCTS.push({ no, baseNo, machine, name, ct, emoji: selectedProductEmoji });
     saveData();
+    audit('품번 등록', no, `${name} · CT ${ct}초`);
     showToast(`✅ ${no} 등록 완료!`);
   }
   closeProductModal(); renderProductList(); syncProductSelect();
@@ -3827,6 +4354,7 @@ function mergeRecordsSafely(rawRecords) {
     .filter(rec => !existingKeySet.has(_recordDedupeKey(rec)));
   toAdd.forEach(rec => addRecordToFirebase(rec, true));
   renderDashboard(); renderHistory();
+  if (toAdd.length) audit('실적 가져오기/복구', `${toAdd.length}건 추가`, `중복 ${rawRecords.length - toAdd.length}건 건너뜀`);
   return { added: toAdd.length, skipped: rawRecords.length - toAdd.length };
 }
 
@@ -4011,6 +4539,7 @@ function saveSchedule() {
   if (!qty)  { showToast('⚠️ 생산 수량을 입력하세요');      return; }
 
   addScheduleToFirebase({ partNo: p.no, partName: p.name, date, qty, createdAt: new Date().toISOString() });
+  audit('일정 등록', `${date} ${p.no}`, `계획 ${qty}ea`);
   renderScheduleList();
   renderScheduleBottomPanel();
 
@@ -4039,18 +4568,57 @@ function scheduleDday(dateStr) {
   return { label: `D-${diff}`, cls: 'ok' };
 }
 
+// ── 계획 대비 실적 ──
+// 일정 1건의 실적 = 같은 품번 + 같은 날짜로 입력된 실적 생산수량 합계
+const SCHEDULE_STATE = {
+  done:    { label:'✅ 달성',   color:'var(--accent3)' },
+  short:   { label:'⚠️ 미달',   color:'var(--danger)'  },
+  running: { label:'▶️ 진행중', color:'var(--accent)'  },
+  planned: { label:'🕐 예정',   color:'var(--muted)'   },
+};
+
+function scheduleProgress(s) {
+  const plan   = +s.qty || 0;
+  const actual = RECORDS.filter(r => r.partNo === s.partNo && r.date === s.date).reduce((a, r) => a + (r.qty || 0), 0);
+  const rate   = plan > 0 ? actual / plan * 100 : 0;
+  const state  = rate >= 100 ? 'done' : s.date < workDateStr() ? 'short' : (actual > 0 || s.startedAt) ? 'running' : 'planned';
+  return { plan, actual, rate, state, cfg: SCHEDULE_STATE[state] };
+}
+
+function scheduleProgressBar(pr, h = 6) {
+  const col = pr.rate >= 100 ? 'var(--accent3)' : pr.state === 'short' ? 'var(--danger)' : 'var(--accent)';
+  return `<div style="height:${h}px;background:var(--border);border-radius:3px;overflow:hidden">
+    <div style="height:100%;width:${Math.min(pr.rate, 100)}%;background:${col};border-radius:3px"></div></div>`;
+}
+
+// 여러 일정 합계 (대시보드·분석 공용)
+function summarizeSchedules(list) {
+  const prs = list.map(s => ({ s, pr: scheduleProgress(s) }));
+  const plan = prs.reduce((a, x) => a + x.pr.plan, 0);
+  const actual = prs.reduce((a, x) => a + x.pr.actual, 0);
+  return { prs, plan, actual, rate: plan > 0 ? actual / plan * 100 : 0, doneCount: prs.filter(x => x.pr.rate >= 100).length };
+}
+
 function scheduleItemHtml(s, showDelete) {
   const p = PRODUCTS.find(x => x.no === s.partNo);
   const d = scheduleDday(s.date);
+  const pr = scheduleProgress(s);
   return `
-  <div class="product-item">
+  <div class="product-item" style="${pr.state === 'done' ? 'opacity:0.75' : ''}">
     <div class="product-icon">${p ? p.emoji : '🗓️'}</div>
     <div class="product-info">
       <div class="product-num">${s.partNo}</div>
       <div class="product-name">${s.partName || (p ? p.name : '')}</div>
-      <div class="product-ct">📅 ${s.date} &nbsp;·&nbsp; 📦 ${(+s.qty || 0).toLocaleString()}ea</div>
+      <div class="product-ct">📅 ${s.date} &nbsp;·&nbsp; 📦 계획 ${pr.plan.toLocaleString()}ea${s.lineName ? ` &nbsp;·&nbsp; 🏭 ${s.lineName}` : ''}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:5px">
+        <div style="flex:1">${scheduleProgressBar(pr)}</div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:${pr.cfg.color};flex-shrink:0">${pr.actual.toLocaleString()} / ${pr.plan.toLocaleString()} (${pr.rate.toFixed(0)}%)</span>
+      </div>
     </div>
-    <span class="remaining-badge ${d.cls}" style="flex-shrink:0">${d.label}</span>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+      <span class="remaining-badge ${d.cls}">${d.label}</span>
+      <span style="font-size:11px;font-weight:700;color:${pr.cfg.color}">${pr.cfg.label}</span>
+    </div>
     ${showDelete ? `<div style="display:flex;gap:6px;flex-shrink:0">
       <button class="btn btn-sm" onclick="openScheduleDeleteModal('${s._key}')" style="color:var(--danger);border-color:var(--danger)">🗑️</button>
     </div>` : ''}
@@ -4061,12 +4629,13 @@ function scheduleItemHtml(s, showDelete) {
 function scheduleCompactItemHtml(s) {
   const p = PRODUCTS.find(x => x.no === s.partNo);
   const d = scheduleDday(s.date);
+  const pr = scheduleProgress(s);
   return `
   <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:5px;font-size:12px">
     <span style="font-size:15px;flex-shrink:0">${p ? p.emoji : '🗓️'}</span>
     <span style="font-family:'JetBrains Mono',monospace;color:var(--accent);font-weight:700;flex-shrink:0">${s.partNo}</span>
     <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${s.partName || (p ? p.name : '')}</span>
-    <span style="color:var(--muted);flex-shrink:0;font-family:'JetBrains Mono',monospace">${s.date.slice(5)} · ${(+s.qty || 0).toLocaleString()}ea</span>
+    <span style="color:${pr.cfg.color};flex-shrink:0;font-family:'JetBrains Mono',monospace;font-weight:700">${s.date.slice(5)} · ${pr.actual.toLocaleString()}/${pr.plan.toLocaleString()} (${pr.rate.toFixed(0)}%)</span>
     <span class="remaining-badge ${d.cls}" style="flex-shrink:0;font-size:10px;padding:2px 8px">${d.label}</span>
   </div>`;
 }
@@ -4081,8 +4650,19 @@ function renderScheduleList() {
     return;
   }
   if (empty) empty.style.display = 'none';
-  const sorted = [...SCHEDULES].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  el.innerHTML = sorted.map(s => scheduleItemHtml(s, true)).join('');
+  // 오늘 이후 일정은 날짜순, 지난 일정은 접어서 최근 날짜순으로 따로 표시
+  const today = workDateStr();
+  const upcoming = SCHEDULES.filter(s => (s.date || '') >= today).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const past     = SCHEDULES.filter(s => (s.date || '') <  today).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const pastSum  = summarizeSchedules(past);
+  el.innerHTML = (upcoming.length ? upcoming.map(s => scheduleItemHtml(s, true)).join('')
+      : `<div style="text-align:center;padding:16px;color:var(--muted)">오늘 이후 일정이 없습니다</div>`) +
+    (past.length ? `<details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);padding:8px 4px">
+        📁 지난 일정 ${past.length}건 · 달성 ${pastSum.doneCount}/${past.length} · 전체 달성률 ${pastSum.rate.toFixed(0)}%
+      </summary>
+      ${past.map(s => scheduleItemHtml(s, true)).join('')}
+    </details>` : '');
 }
 
 // 가동현황 탭 - 자동 전환 모드일 때만 하단에 다가오는 생산 일정을 표시
@@ -4092,9 +4672,9 @@ function renderScheduleBottomPanel() {
   if (!panel || !list) return;
   if (!_slideActive || !SCHEDULES.length) { panel.style.display = 'none'; return; }
 
-  const today = todayDateStr();
+  const today = workDateStr();
   const upcoming = SCHEDULES
-    .filter(s => s.date && s.date >= today)
+    .filter(s => s.date && s.date >= today && scheduleProgress(s).rate < 100) // 이미 달성한 일정은 숨김
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 8);
 
@@ -4166,11 +4746,13 @@ function saveCode() {
       });
     }
     saveData();
+    audit('손실코드 수정', code, name);
     showToast(`✏️ ${code} 수정 완료!`);
   } else {
     if (LOSS_CODES.find(c => c.code === code)) { showToast('⚠️ 이미 등록된 코드'); return; }
     LOSS_CODES.push({ code, name, type, color, emoji: selectedCodeEmoji });
     saveData();
+    audit('손실코드 등록', code, name);
     showToast(`✅ ${code} 등록 완료!`);
   }
   closeCodeModal(); renderCodeList(); renderCodeTable();
@@ -4221,6 +4803,87 @@ function renderCodeList() {
     </div>`).join('');
 }
 
+// ══════════════════════════════
+//  불량 유형 코드
+// ══════════════════════════════
+function renderDefectCodeList() {
+  const el = document.getElementById('defectCodeList');
+  if (el) el.innerHTML = DEFECT_CODES.length ? DEFECT_CODES.map((c, i) => `
+    <span class="worker-chip" style="color:var(--danger);background:rgba(255,64,96,0.08);border-color:rgba(255,64,96,0.3);font-size:13px">
+      ${c.emoji || '🧪'} ${escapeHtml(c.name)} <span style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace">${c.code}</span>
+      <button class="worker-chip-del" onclick="deleteDefectCode(${i})">×</button>
+    </span>`).join('') : '<span style="font-size:12px;color:var(--muted)">등록된 불량 유형이 없습니다</span>';
+  renderDefectTypeInputs('defectTypeInputs', 'defect_', 'onDefectTypeInput()');
+}
+
+// 실적 입력/수정 화면의 유형별 수량 입력칸 (입력값은 유지)
+function renderDefectTypeInputs(containerId, prefix, handler) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  const keep = {};
+  wrap.querySelectorAll('input').forEach(i => { keep[i.id] = i.value; });
+  wrap.innerHTML = DEFECT_CODES.map(c => `
+    <label style="display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:12px">
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.emoji || '🧪'} ${escapeHtml(c.name)}</span>
+      <input type="number" min="0" class="time-input-small" id="${prefix}${c.code}" placeholder="0" value="${keep[prefix + c.code] || ''}" oninput="${handler}" style="width:64px">
+    </label>`).join('');
+}
+
+function addDefectCode() {
+  const input = document.getElementById('defectCodeNameInput');
+  const name = (input.value || '').trim();
+  if (!name) { showToast('⚠️ 불량 유형명을 입력하세요'); return; }
+  if (DEFECT_CODES.some(c => c.name === name)) { showToast('⚠️ 이미 있는 불량 유형'); return; }
+  const nums = DEFECT_CODES.map(c => +(c.code.split('-')[1] || 0));
+  const code = 'DF-' + String(Math.max(0, ...nums) + 1).padStart(2, '0');
+  DEFECT_CODES.push({ code, name, emoji: '🧪' });
+  input.value = '';
+  saveData();
+  audit('불량코드 추가', code, name);
+  renderDefectCodeList();
+}
+
+function deleteDefectCode(i) {
+  const c = DEFECT_CODES[i];
+  if (!c || !confirm(`🧪 불량 유형 '${c.name}'을(를) 삭제할까요?\n(이미 입력된 실적의 불량 기록은 그대로 남습니다)`)) return;
+  DEFECT_CODES.splice(i, 1);
+  saveData();
+  audit('불량코드 삭제', c.code, c.name);
+  renderDefectCodeList();
+}
+
+// 입력칸에서 [{code, qty}] 수집
+function collectDefectTypes(prefix) {
+  return DEFECT_CODES.map(c => ({ code: c.code, qty: +(document.getElementById(prefix + c.code)?.value) || 0 }))
+    .filter(x => x.qty > 0);
+}
+
+function fillDefectTypes(prefix, defects) {
+  DEFECT_CODES.forEach(c => {
+    const el = document.getElementById(prefix + c.code);
+    if (el) el.value = (defects || []).find(d => d.code === c.code)?.qty || '';
+  });
+}
+
+// 유형별 수량을 입력하면 불량수량 = 합계로 자동 반영
+function syncDefectSum(prefix, defectInputId, sumLabelId) {
+  const sum = collectDefectTypes(prefix).reduce((a, d) => a + d.qty, 0);
+  const lbl = document.getElementById(sumLabelId);
+  if (lbl) lbl.textContent = sum ? `· 합계 ${sum}` : '';
+  if (sum) document.getElementById(defectInputId).value = sum;
+  return sum;
+}
+
+function onDefectTypeInput()     { syncDefectSum('defect_', 'inputDefect', 'defectTypeSum'); calcOEE(); }
+function onEditDefectTypeInput() { syncDefectSum('edit_defect_', 'editDefect', 'editDefectTypeSum'); calcEditOEE(); }
+
+// 유형별 합계가 있는데 불량수량과 다르면 저장 막기 (true = 문제 없음)
+function checkDefectTypes(defects, defect) {
+  const sum = defects.reduce((a, d) => a + d.qty, 0);
+  if (sum && sum !== defect) { showToast(`⚠️ 불량 유형별 합계(${sum})가 불량수량(${defect})과 다릅니다`); return false; }
+  return true;
+}
+
 // ══ 임시저장 ══
 let DRAFTS = [];
 
@@ -4257,7 +4920,7 @@ function saveDraft() {
   }).filter(x => x.min > 0 || x.note);
 
   const draft = { id: 'draft-' + Date.now(), savedAt: new Date().toISOString(),
-    date, shift, partNo, productName, ct, qty, defect, runMin, inputBy, memo, lossCodes };
+    date, shift, partNo, productName, ct, qty, defect, runMin, inputBy, memo, lossCodes, defects: collectDefectTypes('defect_') };
 
   // 같은 품번의 기존 임시저장은 자동 삭제 후 최신으로 대체
   const hadPrev = partNo && DRAFTS.some(d => d.partNo === partNo);
@@ -4293,6 +4956,9 @@ function loadDraft(id) {
   document.getElementById('inputBy').value          = draft.inputBy || '';
   document.getElementById('inputMemo').value        = draft.memo || '';
   if (draft.date) document.getElementById('inputWeekBadge').textContent = getWeekKey(draft.date);
+  fillDefectTypes('defect_', draft.defects);
+  syncDefectSum('defect_', 'inputDefect', 'defectTypeSum');
+  if ((draft.defects || []).length) document.getElementById('defectTypeWrap').open = true;
 
   (draft.lossCodes || []).forEach(lc => {
     const timeEl = document.getElementById('time_' + lc.code);
@@ -4606,6 +5272,7 @@ function renderAnalysis() {
 
   renderAnalysisKpi();
 
+  renderDowntimeAnalysis();
   renderLineCapaAnalysis();
 
   if (!RECORDS.length) {
@@ -4712,6 +5379,67 @@ function renderAnalysisTable(keys, groupCalc, isProduct) {
 function clearAnalysisSelection() {
   _selectedAnalysisKey = null;
   renderAnalysis();
+}
+
+// ── 고장(수리대기) 분석 ──
+let downtimeCollapsed = localStorage.getItem('mc_downtime_collapsed') === '1';
+
+function toggleDowntimePanel() {
+  downtimeCollapsed = !downtimeCollapsed;
+  localStorage.setItem('mc_downtime_collapsed', downtimeCollapsed ? '1' : '0');
+  renderDowntimeAnalysis();
+}
+
+function fmtMin(min) {
+  if (min === null || min === undefined) return '-';
+  return min < 60 ? `${Math.round(min)}분` : `${Math.floor(min / 60)}시간 ${Math.round(min % 60)}분`;
+}
+
+function renderDowntimeAnalysis() {
+  const btn  = document.getElementById('downtimeToggle');
+  const body = document.getElementById('downtimeBody');
+  if (btn) btn.textContent = downtimeCollapsed ? '▼ 펼치기' : '▲ 접기';
+  if (body) body.style.display = downtimeCollapsed ? 'none' : '';
+  if (downtimeCollapsed || !body) return;
+
+  const monthInput = document.getElementById('downtimeMonth');
+  if (!monthInput.value) monthInput.value = todayDateStr().slice(0, 7);
+  const month = monthInput.value;
+  // 고장은 시작한 달 기준으로 집계 (해당 월 시작 시각의 연-월 비교는 로컬 날짜로)
+  const localMonth = iso => { const t = new Date(iso); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}`; };
+  const events = DOWNTIMES.filter(d => d.start && localMonth(d.start) === month);
+
+  const rows = LINES.map(line => {
+    const evs = events.filter(d => d.lineId === line.id);
+    const total = evs.reduce((a, d) => a + downtimeMinutes(d), 0);
+    const runMin = RECORDS.filter(r => (line.partNos || []).includes(r.partNo) && r.date.slice(0, 7) === month)
+      .reduce((a, r) => a + (r.runMin || 0), 0);
+    return { line, count: evs.length, total, mttr: evs.length ? total / evs.length : null, mtbf: evs.length && runMin ? runMin / evs.length : null };
+  }).sort((a, b) => b.total - a.total || b.count - a.count);
+
+  document.getElementById('downtimeTableBody').innerHTML = rows.length ? rows.map(r => `
+    <tr class="hist-row" style="font-size:12px">
+      <td style="font-weight:700;white-space:nowrap">${escapeHtml(r.line.name)}</td>
+      <td style="${r.count ? 'color:var(--danger);font-weight:700' : 'color:var(--muted)'}">${r.count}회</td>
+      <td>${r.count ? r.total.toLocaleString() : '-'}</td>
+      <td>${fmtMin(r.mttr)}</td>
+      <td>${fmtMin(r.mtbf)}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">📭 등록된 라인이 없습니다</td></tr>';
+
+  const hm = iso => { const t = new Date(iso); return `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`; };
+  const list = [...events].sort((a, b) => b.start.localeCompare(a.start)).slice(0, 50);
+  document.getElementById('downtimeEventList').innerHTML = list.length ? list.map(d => {
+    const t = new Date(d.start);
+    const endLabel = d.end ? hm(d.end) + (d.autoClosed ? ' (08시 자동종료)' : '') : '<b style="color:var(--danger)">진행중</b>';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--border);font-size:12px;flex-wrap:wrap">
+      <span style="font-family:'JetBrains Mono',monospace;flex-shrink:0">${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')}</span>
+      <span style="font-weight:700;flex-shrink:0">🏭 ${escapeHtml(d.lineName || '')}</span>
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--muted);flex-shrink:0">${hm(d.start)}~${endLabel}</span>
+      <span style="flex:1;min-width:0;color:var(--text)">${d.note ? '📝 ' + escapeHtml(d.note) : ''}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--warn);flex-shrink:0">${fmtMin(downtimeMinutes(d))}</span>
+    </div>`;
+  }).join('') : '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">🎉 이 달의 고장 이력이 없습니다</div>';
 }
 
 // ── 라인 캐파 분석 콜렙시블 ──
@@ -4850,7 +5578,7 @@ function calcLossCodeMap(recs) {
 //   품질 손실 = 실가동 × 성능률 × (1 - 품질률)  (불량 생산에 쓴 시간)
 function calcOeeLossBreakdown(recs) {
   const b = { plannedOp: 0, availLoss: 0, speedLoss: 0, qualLoss: 0, codeSum: 0,
-              qty: 0, defect: 0, theoQty: 0, codes: {} };
+              qty: 0, defect: 0, theoQty: 0, codes: {}, defectTypes: {} };
   recs.forEach(r => {
     const lcs = r.lossCodes || [];
     const typeOf = lc => lc.type || LOSS_CODES.find(c => c.code === lc.code)?.type;
@@ -4864,6 +5592,7 @@ function calcOeeLossBreakdown(recs) {
     b.qualLoss  += run * perf * (1 - qual);
     b.qty    += r.qty || 0;
     b.defect += r.defect || 0;
+    (r.defects || []).forEach(d => { b.defectTypes[d.code] = (b.defectTypes[d.code] || 0) + (d.qty || 0); });
     if (r.ct > 0) b.theoQty += run * 60 / r.ct;
     lcs.forEach(lc => {
       if (!lc.min || typeOf(lc) === 'planned') return;
@@ -4883,13 +5612,15 @@ function getOeeFactors(b) {
   const topCode = b.codeList[0];
   const topInfo = topCode ? (LOSS_CODES.find(c => c.code === topCode.code) || { name: topCode.code, emoji: '⚫' }) : null;
   const defRate = b.qty > 0 ? b.defect / b.qty * 100 : 0;
+  const [topDefCode, topDefQty] = Object.entries(b.defectTypes || {}).sort((a, c) => c[1] - a[1])[0] || [];
+  const topDefect = topDefCode ? `${DEFECT_CODES.find(c => c.code === topDefCode)?.name || topDefCode} ${topDefQty}개` : '';
   return [
     { key: 'avail', label: '⏱️ 가용 손실', col: 'var(--accent)',  min: b.availLoss,
       reason: topInfo ? `${topInfo.emoji} ${topInfo.name} ${topCode.min}분${topCode.notes.length ? ` (${topCode.notes.join(' / ')})` : ''}` : '설비정지·비가동' },
     { key: 'perf',  label: '⚡ 성능 손실', col: 'var(--accent2)', min: b.speedLoss,
       reason: b.theoQty > 0 ? `속도저하·순간정지 — 실생산 ${b.qty.toLocaleString()}개 / 이론 ${Math.round(b.theoQty).toLocaleString()}개` : '속도저하·순간정지' },
     { key: 'qual',  label: '✅ 품질 손실', col: 'var(--accent3)', min: b.qualLoss,
-      reason: `불량 ${b.defect.toLocaleString()}개 (불량률 ${defRate.toFixed(2)}%)` },
+      reason: `불량 ${b.defect.toLocaleString()}개 (불량률 ${defRate.toFixed(2)}%)${topDefect ? ` · 주요 유형: ${topDefect}` : ''}` },
   ].sort((a, c) => c.min - a.min);
 }
 
@@ -4948,13 +5679,21 @@ function buildLowOeeRecordsHtml(recs) {
   if (!low.length) return header + `<div style="text-align:center;padding:12px;color:var(--accent3);font-size:12px">🎉 모든 실적이 목표(85%) 이상입니다</div>`;
   const rows = low.map(({ r, oee }) => {
     const idx = RECORDS.indexOf(r);
-    const main = getOeeFactors(calcOeeLossBreakdown([r]))[0];
+    const b = calcOeeLossBreakdown([r]);
+    const main = getOeeFactors(b)[0];
+    // 주요 손실이 전체 손실에서 차지하는 비중 + 가용 손실이면 대표 손실코드
+    const share = b.total > 0 ? Math.round(main.min / b.total * 100) : 0;
+    const topCode = main.key === 'avail' && b.codeList[0]
+      ? (LOSS_CODES.find(c => c.code === b.codeList[0].code)?.name || b.codeList[0].code) : '';
+    const noProd = !(r.qty > 0)
+      ? `<span style="font-size:10px;font-weight:700;color:var(--danger);background:rgba(255,64,96,0.12);border-radius:8px;padding:1px 6px;flex-shrink:0">⛔ 생산 0</span>` : '';
     return `<div class="hist-row" onclick="toggleLowOeeRecord(${idx})" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid var(--border);font-size:12px">
         <span style="font-family:'JetBrains Mono',monospace;flex-shrink:0">${r.date}</span>
-        <span style="color:var(--muted);flex-shrink:0">${r.shift || ''}</span>
+        <span style="color:var(--muted);flex-shrink:0">${shiftLabel(r.shift) || ''}</span>
         <span style="font-family:'JetBrains Mono',monospace;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.partNo}</span>
-        <span style="font-size:11px;color:${main.col};flex-shrink:0">${main.label}</span>
-        <span class="${oeeClass(oee)}" style="font-family:'JetBrains Mono',monospace;font-weight:700;min-width:48px;text-align:right;flex-shrink:0">${oee.toFixed(1)}%</span>
+        ${noProd}
+        <span style="font-size:11px;color:${main.col};flex-shrink:0" title="전체 손실 중 이 요인이 차지하는 비율">${main.label} ${share}%${topCode ? ` · ${topCode}` : ''}</span>
+        <span class="${oeeClass(oee)}" style="font-family:'JetBrains Mono',monospace;font-weight:700;min-width:78px;text-align:right;flex-shrink:0">OEE ${oee.toFixed(1)}%</span>
       </div>
       <div id="low-oee-detail-${idx}" style="display:none;padding:0 10px 10px;background:var(--bg2);border-bottom:1px solid var(--border)"></div>`;
   }).join('');
@@ -4969,6 +5708,61 @@ function toggleLowOeeRecord(idx) {
   if (!open || !RECORDS[idx]) return;
   el.innerHTML = buildOeeFactorHtml([RECORDS[idx]]);
   el.style.display = 'block';
+}
+
+// ── 분석 드릴다운: 불량 유형 파레토 (많은 순 막대 + 누적 비율) ──
+function buildDefectParetoHtml(recs) {
+  const map = {};
+  let typed = 0;
+  recs.forEach(r => (r.defects || []).forEach(d => { map[d.code] = (map[d.code] || 0) + (d.qty || 0); typed += d.qty || 0; }));
+  const totalDefect = recs.reduce((a, r) => a + (r.defect || 0), 0);
+  const header = `<div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin:14px 0 8px">🧪 불량 유형 파레토</div>`;
+  if (!typed) return header + `<div style="text-align:center;padding:12px;color:var(--muted);font-size:12px">${totalDefect ? `불량 ${totalDefect}개 — 유형별 입력 없음 (실적 입력 시 '불량 유형별 수량'을 입력하세요)` : '불량 없음'}</div>`;
+  const entries = Object.entries(map).sort((a, b) => b[1] - a[1]);
+  const max = entries[0][1];
+  let cum = 0;
+  const rows = entries.map(([code, qty]) => {
+    cum += qty;
+    const info = DEFECT_CODES.find(c => c.code === code) || { name: code, emoji: '🧪' };
+    const cumPct = Math.round(cum / typed * 100);
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:5px">
+      <span style="width:96px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${info.emoji || '🧪'} ${escapeHtml(info.name)}</span>
+      <div style="flex:1;height:14px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${Math.round(qty / max * 100)}%;background:var(--danger);border-radius:3px"></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:700;width:52px;text-align:right;flex-shrink:0">${qty.toLocaleString()}개</span>
+      <span style="font-family:'JetBrains Mono',monospace;color:${cumPct <= 80 ? 'var(--danger)' : 'var(--muted)'};width:56px;text-align:right;flex-shrink:0" title="누적 비율">누적 ${cumPct}%</span>
+    </div>`;
+  }).join('');
+  const untyped = totalDefect - typed;
+  return header + rows +
+    `<div style="font-size:10px;color:var(--muted);margin-top:2px">※ 누적 80%까지(빨간 숫자)가 우선 개선 대상${untyped > 0 ? ` · 유형 미입력 불량 ${untyped}개 제외` : ''}</div>`;
+}
+
+// ── 분석 드릴다운: 해당 기간(또는 품번)의 생산일정 계획 대비 실적 ──
+function buildPlanVsActualHtml(key) {
+  const q = getAnalysisQuery();
+  const keyOf = s => analysisPeriod === 'week' ? getWeekKey(s.date) : analysisPeriod === 'month' ? s.date.slice(0, 7)
+    : analysisPeriod === 'year' ? s.date.slice(0, 4) : s.partNo;
+  const list = SCHEDULES.filter(s => s.date && keyOf(s) === key && analysisPartMatches(s.partNo, q));
+  const header = `<div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px;margin:14px 0 8px">🎯 계획 대비 실적</div>`;
+  if (!list.length) return header + `<div style="text-align:center;padding:12px;color:var(--muted);font-size:12px">등록된 생산일정 없음</div>`;
+  const sum = summarizeSchedules(list);
+  const col = sum.rate >= 100 ? 'var(--accent3)' : sum.rate >= 70 ? 'var(--warn)' : 'var(--danger)';
+  const rows = sum.prs.sort((a, b) => a.pr.rate - b.pr.rate).slice(0, 10).map(({ s, pr }) => `
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
+      <span style="font-family:'JetBrains Mono',monospace;flex-shrink:0;width:44px">${s.date.slice(5)}</span>
+      <span style="font-family:'JetBrains Mono',monospace;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.partNo}</span>
+      <div style="width:28%;flex-shrink:0">${scheduleProgressBar(pr)}</div>
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${pr.cfg.color};width:110px;text-align:right;flex-shrink:0">${pr.actual.toLocaleString()}/${pr.plan.toLocaleString()} (${pr.rate.toFixed(0)}%)</span>
+    </div>`).join('');
+  return header + `
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:12px;color:var(--muted)">일정 ${list.length}건 · 달성 ${sum.doneCount}건 · 실적 ${sum.actual.toLocaleString()} / 계획 ${sum.plan.toLocaleString()}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:${col}">${sum.rate.toFixed(1)}%</span>
+    </div>
+    ${rows}
+    ${list.length > 10 ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">※ 달성률 낮은 순 10건만 표시</div>` : ''}`;
 }
 
 function showAnalysisDrilldown(key) {
@@ -5080,6 +5874,8 @@ function renderDrilldownPanel(key) {
     <div class="drill-metrics">${metricsHtml}</div>
     ${buildOeeFactorHtml(currRecs)}
     ${buildLowOeeRecordsHtml(currRecs)}
+    ${buildPlanVsActualHtml(key)}
+    ${buildDefectParetoHtml(currRecs)}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 6px">
       <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1px">🔻 손실코드 분석</div>
       <select class="dash-filter-select" style="font-size:11px;padding:3px 6px;width:auto" onchange="setLossCodeSort(this.value)">
@@ -5272,9 +6068,12 @@ function resetAllLineStatuses() {
   // 비가동 = 작업자 없음 — 초기화 시각은 실제 퇴근 시각이 아니므로 이력 종료 기록은 남기지 않는다
   const needsReset = l => lastChange(l) < cut && ((l.status && l.status !== 'idle') || (l.workers || []).length);
   if (!LINES.some(needsReset)) return;
+  const resetNames = LINES.filter(needsReset).map(l => l.name).join(', ');
+  LINES.filter(l => needsReset(l) && l.status === 'waiting').forEach(l => endDowntime(l, true));
   const at = now.toISOString();
   mutateLines(arr => arr.map(l => needsReset(l) ? { ...l, status: 'idle', statusAt: at, touchedAt: at, workers: [] } : l));
   renderLineStatus();
+  audit('08시 자동 초기화', resetNames);
   showToast('🌅 08:00 가동현황 비가동 초기화 (작업자 해제)');
 }
 
@@ -5295,7 +6094,7 @@ function scheduleLineStatusReset() {
 // ══════════════════════════════════════
 let _navIgnorePop = false;     // 코드에서 직접 history.back()을 호출했을 때 popstate 중복 처리 방지
 let _navCurrentPage = 'lines'; // 현재 활성 탭 (popstate 복원용)
-const ALL_MODAL_IDS = ['productModal','codeModal','recordEditModal','lineModal','deleteModal','timeWarnModal','workerLogModal'];
+const ALL_MODAL_IDS = ['productModal','codeModal','recordEditModal','lineModal','deleteModal','timeWarnModal','workerLogModal','pinModal','auditModal','backupModal'];
 
 function navGetOpenModalId() {
   for (const id of ALL_MODAL_IDS) {
@@ -5360,6 +6159,274 @@ window.addEventListener('popstate', () => {
 // 최초 진입 상태를 history에 기록해 popstate 기준점을 만든다
 history.replaceState({ type: 'page', name: 'lines' }, '', '');
 
+// ══════════════════════════════════════
+//  데이터 보호 — 관리자 PIN / 변경 기록 / 자동 백업
+// ══════════════════════════════════════
+const ADMIN_UNLOCK_MS = 10 * 60 * 1000; // PIN 입력 후 다시 묻지 않는 시간
+const AUDIT_KEEP_DAYS = 90;
+const BACKUP_KEEP     = 14;
+let _adminUntil = 0;
+let _pinCallback = null;
+let _pinMode = 'check'; // 'check' | 'set'
+
+async function hashPin(pin) {
+  const text = 'mc-card:' + pin;
+  if (window.crypto?.subtle) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  let h = 0; for (const c of text) h = (h * 31 + c.charCodeAt(0)) | 0; // https가 아닌 환경용 예비
+  return 'x' + (h >>> 0).toString(16);
+}
+
+// PIN이 설정돼 있으면 확인 후 cb 실행 (설정 안 돼 있거나 10분 안에 입력했으면 바로 실행)
+function requireAdmin(cb) {
+  if (!SETTINGS.adminPinHash || Date.now() < _adminUntil) { cb(); return; }
+  openPinModal('check', cb);
+}
+
+// 이미 정의된 함수를 PIN 확인을 거치도록 감싼다 (onclick 등에서 같은 이름으로 호출되는 곳 모두 적용)
+function guardAdmin(names) {
+  names.forEach(n => {
+    const orig = window[n];
+    if (typeof orig !== 'function') return;
+    window[n] = function (...args) { requireAdmin(() => orig.apply(this, args)); };
+  });
+}
+
+function openPinModal(mode, cb) {
+  _pinMode = mode;
+  _pinCallback = cb || null;
+  document.getElementById('pinModalTitle').textContent = mode === 'set' ? '관리자 PIN 설정' : '관리자 PIN 확인';
+  document.getElementById('pinModalDesc').textContent = mode === 'set'
+    ? '새 PIN을 두 번 입력하세요 (둘 다 비우고 확인하면 PIN 해제)'
+    : '이 작업은 관리자 PIN이 필요합니다';
+  ['pinInput1', 'pinInput2'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('pinInput2').style.display = mode === 'set' ? '' : 'none';
+  // PIN 창은 다른 팝업 바로 앞에 잠깐 뜨는 창이라 뒤로가기 기록(history)에 넣지 않는다
+  document.getElementById('pinModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('pinInput1').focus(), 50);
+}
+
+function closePinModal() {
+  document.getElementById('pinModal').style.display = 'none';
+  _pinCallback = null;
+}
+
+async function confirmPin() {
+  const p1 = document.getElementById('pinInput1').value.trim();
+  const p2 = document.getElementById('pinInput2').value.trim();
+  if (_pinMode === 'set') {
+    if (!p1 && !p2) {
+      if (!confirm('관리자 PIN을 해제할까요? 누구나 수정·삭제할 수 있게 됩니다.')) return;
+      saveSettings({ adminPinHash: null });
+      audit('PIN 해제', '관리자 PIN');
+      closePinModal(); showToast('🔓 관리자 PIN 해제됨'); return;
+    }
+    if (p1.length < 4) { showToast('⚠️ PIN은 4자리 이상'); return; }
+    if (p1 !== p2)     { showToast('⚠️ 두 PIN이 다릅니다'); return; }
+    saveSettings({ adminPinHash: await hashPin(p1) });
+    _adminUntil = Date.now() + ADMIN_UNLOCK_MS;
+    audit('PIN 설정', '관리자 PIN');
+    closePinModal(); showToast('🔐 관리자 PIN 설정됨'); return;
+  }
+  if ((await hashPin(p1)) !== SETTINGS.adminPinHash) {
+    showToast('⛔ PIN이 틀렸습니다');
+    document.getElementById('pinInput1').value = '';
+    return;
+  }
+  _adminUntil = Date.now() + ADMIN_UNLOCK_MS;
+  const cb = _pinCallback;
+  closePinModal();
+  if (cb) cb();
+}
+
+function openPinSetup() { requireAdmin(() => openPinModal('set')); }
+
+function saveSettings(patch) {
+  SETTINGS = { ...SETTINGS, ...patch };
+  Object.keys(SETTINGS).forEach(k => { if (SETTINGS[k] === null) delete SETTINGS[k]; });
+  if (fbDB) fbDB.ref(FB_REF + '/settings').update(patch).catch(e => console.warn('[Firebase] 설정 저장 실패:', e));
+}
+
+// ── 기기 이름 (변경 기록에 표시) ──
+function deviceName() { return localStorage.getItem('mc_device_name') || '이름없는 기기'; }
+
+function setDeviceName() {
+  const v = prompt('이 기기의 이름을 입력하세요 (예: 1라인 태블릿, 사무실 PC)', localStorage.getItem('mc_device_name') || '');
+  if (v === null) return;
+  localStorage.setItem('mc_device_name', v.trim());
+  const el = document.getElementById('deviceNameLabel');
+  if (el) el.textContent = deviceName();
+  showToast('📱 기기 이름 저장됨');
+}
+
+// ── 변경 기록 ──
+// mc/auditLogs 에 1건씩 쌓는다 (앱 시작 시 내려받지 않고, 변경 기록 창을 열 때만 읽음)
+function audit(action, target, detail = '') {
+  if (!fbDB) return;
+  fbDB.ref(FB_REF + '/auditLogs').push({ at: new Date().toISOString(), action, target: String(target || ''), detail: String(detail || ''), device: deviceName() })
+    .catch(e => console.warn('[Firebase] 변경 기록 저장 실패:', e));
+}
+
+let _auditRows = [];
+
+function openAuditModal() {
+  document.getElementById('auditModal').style.display = 'flex';
+  navPushModal('auditModal');
+  document.getElementById('auditList').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">불러오는 중…</div>';
+  if (!fbDB) { document.getElementById('auditList').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Firebase 미연결 — 변경 기록 없음</div>'; return; }
+  const ref = fbDB.ref(FB_REF + '/auditLogs');
+  ref.limitToLast(500).once('value').then(snap => {
+    _auditRows = Object.entries(snap.val() || {}).map(([k, v]) => ({ ...v, _key: k })).sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+    renderAuditList();
+    // 오래된 기록 정리 (보관 기간 초과분 삭제)
+    const cutoff = new Date(Date.now() - AUDIT_KEEP_DAYS * 86400000).toISOString();
+    ref.orderByChild('at').endAt(cutoff).once('value').then(old => {
+      const del = {};
+      Object.keys(old.val() || {}).forEach(k => { del[k] = null; });
+      if (Object.keys(del).length) ref.update(del);
+    }).catch(() => {});
+  }).catch(e => { document.getElementById('auditList').innerHTML = `<div style="color:var(--danger);padding:12px">불러오기 실패: ${escapeHtml(e.message || e)}</div>`; });
+}
+
+function closeAuditModal() {
+  navCloseModal();
+  document.getElementById('auditModal').style.display = 'none';
+}
+
+function renderAuditList() {
+  const q = (document.getElementById('auditFilter').value || '').trim().toLowerCase();
+  const rows = q ? _auditRows.filter(r => [r.action, r.target, r.detail, r.device].join(' ').toLowerCase().includes(q)) : _auditRows;
+  const el = document.getElementById('auditList');
+  if (!rows.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">📭 기록이 없습니다</div>'; return; }
+  el.innerHTML = rows.map(r => {
+    const t = new Date(r.at);
+    const when = `${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+    const danger = /삭제|초기화|복원|해제/.test(r.action);
+    return `<div style="display:flex;gap:8px;align-items:baseline;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px;flex-wrap:wrap">
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--muted);flex-shrink:0">${when}</span>
+      <span style="font-weight:700;color:${danger ? 'var(--danger)' : 'var(--accent)'};flex-shrink:0">${escapeHtml(r.action)}</span>
+      <span style="flex:1;min-width:0">${escapeHtml(r.target)}${r.detail ? ` <span style="color:var(--muted)">· ${escapeHtml(r.detail)}</span>` : ''}</span>
+      <span style="color:var(--muted);flex-shrink:0">📱 ${escapeHtml(r.device || '')}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── 자동 백업 ──
+// mc/backups/<날짜> 에 전체 스냅샷, mc/backupIndex/<날짜> 에 목록(작은 데이터)을 둔다.
+// 하루 1회 — 08시 이후 처음 확인한 기기가 백업하고, 최근 14개만 남긴다.
+function runDailyBackup(manual) {
+  if (!fbDB) { if (manual) showToast('⚠️ Firebase 미연결'); return; }
+  const now = new Date();
+  if (!manual && now.getHours() < 8) return;
+  const date = todayDateStr();
+  if (!manual && localStorage.getItem('mc_last_backup') === date) return;
+  const idxRef = fbDB.ref(FB_REF + '/backupIndex');
+  idxRef.once('value').then(snap => {
+    const index = snap.val() || {};
+    if (!manual && index[date]) { localStorage.setItem('mc_last_backup', date); return; }
+    const strip = arr => Object.fromEntries(arr.filter(x => x._key).map(({ _key, ...rest }) => [_key, rest]));
+    const backup = {
+      at: now.toISOString(), device: deviceName(),
+      products: PRODUCTS, lossCodes: LOSS_CODES, defectCodes: DEFECT_CODES, lines: LINES,
+      records: strip(RECORDS), schedules: strip(SCHEDULES), workLogs: strip(WORK_LOGS), downtimes: strip(DOWNTIMES),
+    };
+    const counts = { records: RECORDS.length, products: PRODUCTS.length, lines: LINES.length, schedules: SCHEDULES.length };
+    return fbDB.ref(FB_REF + '/backups/' + date).set(backup)
+      .then(() => idxRef.child(date).set({ at: backup.at, device: backup.device, ...counts }))
+      .then(() => {
+        localStorage.setItem('mc_last_backup', date);
+        // 오래된 백업 삭제
+        const dates = Object.keys({ ...index, [date]: true }).sort().reverse();
+        dates.slice(BACKUP_KEEP).forEach(d => { fbDB.ref(FB_REF + '/backups/' + d).remove(); idxRef.child(d).remove(); });
+        if (manual) { showToast('💾 백업 완료'); audit('수동 백업', date); renderBackupList(); }
+      });
+  }).catch(e => { console.warn('[Firebase] 백업 실패:', e); if (manual) showToast('❌ 백업 실패'); });
+}
+
+function openBackupModal() {
+  document.getElementById('backupModal').style.display = 'flex';
+  navPushModal('backupModal');
+  renderBackupList();
+}
+
+function closeBackupModal() {
+  navCloseModal();
+  document.getElementById('backupModal').style.display = 'none';
+}
+
+function renderBackupList() {
+  const el = document.getElementById('backupList');
+  if (!fbDB) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Firebase 미연결</div>'; return; }
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">불러오는 중…</div>';
+  fbDB.ref(FB_REF + '/backupIndex').once('value').then(snap => {
+    const entries = Object.entries(snap.val() || {}).sort((a, b) => b[0].localeCompare(a[0]));
+    if (!entries.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">📭 아직 백업이 없습니다</div>'; return; }
+    el.innerHTML = entries.map(([date, v]) => {
+      const t = new Date(v.at);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);font-size:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px">
+          <div style="font-family:'JetBrains Mono',monospace;font-weight:700">📅 ${date} <span style="color:var(--muted);font-weight:400">${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}</span></div>
+          <div style="color:var(--muted);font-size:11px">실적 ${v.records ?? '-'} · 품번 ${v.products ?? '-'} · 라인 ${v.lines ?? '-'} · 일정 ${v.schedules ?? '-'} · 📱 ${escapeHtml(v.device || '')}</div>
+        </div>
+        <button class="btn btn-sm" onclick="downloadBackup('${date}')">⬇️ 다운로드</button>
+        <button class="btn btn-sm" onclick="restoreBackup('${date}','records')" style="color:var(--accent);border-color:var(--accent)">♻️ 실적만 복원</button>
+        <button class="btn btn-sm" onclick="restoreBackup('${date}','full')" style="color:var(--danger);border-color:var(--danger)">⏪ 전체 복원</button>
+      </div>`;
+    }).join('');
+  }).catch(e => { el.innerHTML = `<div style="color:var(--danger);padding:12px">불러오기 실패: ${escapeHtml(e.message || e)}</div>`; });
+}
+
+function downloadBackup(date) {
+  fbDB.ref(FB_REF + '/backups/' + date).once('value').then(snap => {
+    const b = snap.val();
+    if (!b) { showToast('⚠️ 백업을 찾을 수 없습니다'); return; }
+    // 기존 "가져오기"/"실적 복구"에서 그대로 읽을 수 있는 형식(records는 배열)으로 저장
+    const out = { version: 1, exportedAt: b.at, backupDate: date, ...b, records: Object.values(b.records || {}) };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `mc-backup-${date}.json`; a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+function restoreBackup(date, mode) {
+  // 전체 복원은 품번·코드·라인을 되돌리므로 PIN 필요, 실적만 복원은 PIN 없이
+  (mode === 'full' ? requireAdmin : cb => cb())(() => {
+    const msg = mode === 'full'
+      ? `⏪ ${date} 백업으로 전체 복원합니다.\n\n· 품번·손실코드·불량코드·라인 목록을 그 날짜 상태로 되돌립니다\n· 실적·일정은 지우지 않고 빠진 것만 추가합니다\n\n계속할까요?`
+      : `♻️ ${date} 백업에서 빠진 실적만 추가합니다. (기존 실적은 그대로)\n\n계속할까요?`;
+    if (!confirm(msg)) return;
+    fbDB.ref(FB_REF + '/backups/' + date).once('value').then(snap => {
+      const b = snap.val();
+      if (!b) { showToast('⚠️ 백업을 찾을 수 없습니다'); return; }
+      const { added } = mergeRecordsSafely(Object.values(b.records || {}));
+      if (mode === 'full') {
+        if (Array.isArray(b.products))    PRODUCTS     = b.products;
+        if (Array.isArray(b.lossCodes))   LOSS_CODES   = b.lossCodes;
+        if (Array.isArray(b.defectCodes)) DEFECT_CODES = b.defectCodes;
+        saveData();
+        const backupLines = normLines(b.lines);
+        mutateLines(() => backupLines);
+        Object.entries(b.schedules || {}).forEach(([k, s]) => {
+          if (SCHEDULES.some(x => x._key === k)) return;
+          SCHEDULES.push({ ...s, _key: k });
+          fbDB.ref(FB_REF + '/schedules/' + k).set(s);
+        });
+        localStorage.setItem('mc_schedules', JSON.stringify(SCHEDULES));
+        renderProductList(); renderCodeList(); renderCodeTable(); renderDefectCodeList(); renderScheduleList();
+      }
+      audit(mode === 'full' ? '전체 복원' : '실적 복원', date, `실적 ${added}건 추가`);
+      showToast(`✅ 복원 완료 — 실적 ${added}건 추가${mode === 'full' ? ' · 품번/코드/라인 복원' : ''}`);
+    });
+  });
+}
+
+// 관리자 PIN은 품번·코드·라인관리 화면 "접근"에만 적용 (showPage의 ADMIN_PAGES 참고).
+// 가져오기는 파일 내용으로 품번·손실코드를 통째로 덮어써 화면 잠금을 우회할 수 있어 함께 보호한다.
+guardAdmin(['importData']);
+
 // ══ INIT ══
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme(localStorage.getItem('mc_theme') || 'dark');
@@ -5387,37 +6454,50 @@ document.addEventListener('DOMContentLoaded', () => {
     applyProductCollapsed();
     applyCodeCollapsed();
     applyLineMgmtCollapsed();
+    renderDefectCodeList();
     scheduleLineStatusReset();
+    const dn = document.getElementById('deviceNameLabel');
+    if (dn) dn.textContent = deviceName();
+    // 자동 백업 — 접속 15초 뒤 1회, 이후 10분마다 확인 (하루 1번만 실제 백업)
+    setTimeout(() => runDailyBackup(false), 15000);
+    setInterval(() => runDailyBackup(false), 10 * 60 * 1000);
   });
 });
 
 // ══ 업데이트 내용 ══
-// 배너에는 이번 버전의 변경사항만 표시 — 버전 올릴 때 이전 항목은 지우고 새 내용으로 교체
+// 배너에는 가장 최근 날짜의 변경사항만 표시 — 새로 배포할 때 날짜와 목록을 통째로 교체 (이전 이력은 지움)
+const UPDATE_DATE = '2026-11-25';
 const UPDATE_NOTES = [
-  '🛠️ 가동현황 — 등록해 둔 가동상태·작업자가 갑자기 전부 비가동으로 사라지던 문제 수정 (모든 기기 업데이트 필요)',
-  '📅 주차 기준 변경 — 일요일 ~ 토요일을 한 주로 집계 (주차 옆에 날짜 범위 표시)',
-  '📥 다운로드 — 대시보드·이력·라인관리·생산일정·분석 화면을 HTML 또는 PDF로 저장 (상단 📥 버튼)',
-  '👷 작업자 이력 — 가동중 라인 작업자를 일별·라인별로 기록하고 검색 (첫 가동은 08:00 기준)',
-  '🩺 분석 — OEE 저하 요인 분석 및 품번 검색 필터를 주/월/연별에도 적용',
+  '🎯 계획 대비 실적 — 생산일정이 가동 시 삭제되지 않고 남아 달성률 표시 (대시보드·라인카드·일정·분석)',
+  '🔧 고장 이력 — 수리대기 시작/종료·사유 기록, 30분 이상 정지 시 카드 깜빡임, 분석에 MTTR·MTBF',
+  '🛡️ 데이터 보호 — 관리자 PIN(품번·코드·라인관리 화면 접근 시), 변경 기록, 매일 자동 백업·복원',
+  '🧪 불량 유형 — 실적 입력 시 유형별 불량 수량, 분석에 불량 파레토',
+  '👷 작업자별 실적 · 📊 엑셀(CSV) 내보내기 · ✏️ 라인 카드에서 바로 실적 입력',
+  '👆 스와이프 — 화면을 좌우로 밀어 이전/다음 탭 이동 (자동 전환 중에는 라인 카드 넘기기)',
+  '🩺 OEE 목표 미달 목록 — OEE 값·손실 비율·대표 사유·생산 0 표시 개선',
 ];
 
 // ══ Service Worker 등록 ══
 let _waitingSW = null;
 
 // 배너는 아직 구버전 페이지에서 뜨므로, 새 SW가 캐시해 둔 새 index.html에서 UPDATE_NOTES를 읽어온다
+// (날짜 UPDATE_DATE와 목록 UPDATE_NOTES를 함께 읽어온다 — 못 읽으면 현재 페이지 값 사용)
 async function loadLatestUpdateNotes() {
+  const fallback = { date: UPDATE_DATE, notes: UPDATE_NOTES };
   try {
     const keys = (await caches.keys()).filter(k => k.startsWith('machine-card-static-v'));
     keys.sort((a, b) => parseInt(b.split('-v')[1]) - parseInt(a.split('-v')[1]));
-    if (!keys.length) return UPDATE_NOTES;
+    if (!keys.length) return fallback;
     const res = await (await caches.open(keys[0])).match('./index.html');
-    if (!res) return UPDATE_NOTES;
-    const m = (await res.text()).match(/const UPDATE_NOTES = \[([\s\S]*?)\];/);
-    if (!m) return UPDATE_NOTES;
+    if (!res) return fallback;
+    const text = await res.text();
+    const m = text.match(/const UPDATE_NOTES = \[([\s\S]*?)\];/);
+    if (!m) return fallback;
     const notes = [...m[1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map(x => x[1].replace(/\\(.)/g, '$1'));
-    return notes.length ? notes : UPDATE_NOTES;
+    const date  = text.match(/const UPDATE_DATE = '([^']*)'/)?.[1] || '';
+    return notes.length ? { date, notes } : fallback;
   } catch (e) {
-    return UPDATE_NOTES;
+    return fallback;
   }
 }
 
@@ -5426,7 +6506,9 @@ async function showUpdateBanner(waiting) {
   const banner = document.getElementById('updateBanner');
   const list   = document.getElementById('updateNotesList');
   if (!banner || !list) return;
-  const notes = await loadLatestUpdateNotes();
+  const { date, notes } = await loadLatestUpdateNotes();
+  const title = document.getElementById('updateBannerTitle');
+  if (title) title.textContent = `🆕 업데이트 내용${date ? ` (${date})` : ''}`;
   list.innerHTML = notes.map(n => `<li>${n}</li>`).join('');
   banner.style.display = 'block';
 }
